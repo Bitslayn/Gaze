@@ -35,9 +35,9 @@ local gazeSeed = client.uuidToIntArray(avatar:getUUID()) % 512 + 1
 local focusTimer = 0
 
 -- variables that control the gazing. Put them here so you can easily access them and put them in a metatable or something
-local socialInterest = 0.7 -- how likley to look at entities compared to blocks
-local soundInterest = 0.5  -- how likley it is to look at sounds
-local attentionSpan = 20   -- How many ticks until the player loses focus
+local socialInterest = 0.8  -- how likley to look at entities compared to blocks
+local soundInterest = 0.5   -- how likley it is to look at sounds
+local dynamicsCooldown = 40 -- How many ticks until events like sounds & punching can take attention
 
 ---`FOXAPI` Raises an error if the value of its argument v is false (i.e., `nil` or `false`); otherwise, returns all its arguments. In case of error, `message` is the error object; when absent, it defaults to `"assertion failed!"`
 ---@generic T
@@ -45,7 +45,7 @@ local attentionSpan = 20   -- How many ticks until the player loses focus
 ---@param message? any
 ---@param level? integer
 ---@return T v
-function assert(v, message, level)
+local function assert(v, message, level)
   return v or error(message or "Assertion failed!", (level or 1) + 1)
 end
 
@@ -79,25 +79,14 @@ local function getEyeDir(pos)
   return x, y, z > 0
 end
 
----Checks if the position is obscured, being behind a block from the player, or in the dark
+---Checks if the position is obscured
 ---@param pos Vector3
 ---@return boolean
 local function isObscured(pos)
   pos = getGazePos(pos)
   local hit = select(2, raycast:block(getEyePos(player), pos, "VISUAL"))
   local isBehindWall = (hit - pos):length() > 1
-
-  local playerNbt = player:getNbt()
-  local effects = playerNbt.ActiveEffects or playerNbt.active_effects
-  local json = tostring(toJson(effects))
-  local isNightVision = json:find('"Id":16') or json:find("night_vision")
-
-  if isNightVision then
-    return isBehindWall
-  else
-    local block, sky = world.getLightLevel(pos), world.getSkyLightLevel(pos)
-    return isBehindWall or (block < 3 and sky < 3)
-  end
+  return isBehindWall
 end
 
 ---@class Random
@@ -201,7 +190,6 @@ end
 function events.tick()
   if focusTimer > 0 then
     focusTimer = focusTimer - 1
-    return
   end
 
   local time = world.getTime()
@@ -230,17 +218,17 @@ end
 
 -- Set gaze based on sounds
 
-function events.on_play_sound(_, pos, volume)
+function events.on_play_sound(sound, pos, volume)
   if not player:isLoaded() then return end
   if focusTimer ~= 0 then return end
+  if string.find(sound, "step") then return end
 
   local time = world.getTime(client:getFrameTime())
   soundRng.seed = time * gazeSeed
 
   local distance = (player:getPos() - pos):length()
   if distance < 1 or soundRng(100) >= soundInterest * 200 / distance * volume then return end
-
-  focusTimer = attentionSpan
+  focusTimer = dynamicsCooldown
   currentGaze = pos
 end
 
@@ -250,7 +238,7 @@ function events.tick()
   if focusTimer ~= 0 then return end
   if player:getVelocity().x_z:length() < 0.25 and player:getSwingTime() ~= 1 then return end
 
-  focusTimer = attentionSpan
+  focusTimer = dynamicsCooldown
   currentGaze = player:getTargetedEntity(5)
 end
 
@@ -259,7 +247,7 @@ end
 function events.damage(_, attacker)
   if focusTimer ~= 0 then return end
 
-  focusTimer = attentionSpan
+  focusTimer = dynamicsCooldown
   currentGaze = attacker
 end
 
@@ -267,7 +255,7 @@ end
 
 ---@param chatterName string
 function pings.chatGaze(chatterName)
-  focusTimer = attentionSpan
+  focusTimer = dynamicsCooldown
   currentGaze = world.getPlayers()[chatterName]
 end
 
