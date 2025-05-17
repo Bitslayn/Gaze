@@ -5,27 +5,11 @@ ____  ___ __   __
 |_|  \___//_/ \_\
 FOX's Gaze API v1.0.0-dev
 
-Credits:
-  Automatic Gaze - ChloeSpacedOut
-  Deterministic Random - Lexize
-  Emotional Support - Vicky
+Contributors:
+  ChloeSpacedOut - Automatic Gaze
+  Lexize - Deterministic Random
 
-Testers:
-  Jcera
-  ChloeSpacedOut
-  XanderCrates
-  OhItsElectric
-  AuriaFoxGirl
-
-TODO change photoMode to a viewer override that forces everyone's gaze onto a position or entity
-TODO fix chat message name detection
-TODO make getting eye height safer
-
-TODO make a "gaze" an object which can be enabled, disabled, configured, and created.
-TODO make gaze objects able to have separate targets and target overrides
-TODO add methods for getting the current gaze block or entity
-(Also to allow skulls to have their own gaze that isn't just a mirror of the player's eye position)
-
+Testers: Jcera, XanderCrates, OhItsElectric, AuriaFoxGirl
 
 --]]
 
