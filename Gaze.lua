@@ -59,6 +59,20 @@ local function stringRandom(str)
 end
 
 --#ENDREGION
+--#REGION ˚♡ Particles ♡˚
+
+---@param a Vector3
+---@param b Vector3
+local function drawLine(a, b, color)
+  particles["minecraft:end_rod"]
+      :setPos(math.lerp(a, b, math.random()))
+      :setLifetime(math.round((a - b):length()))
+      :setColor(color)
+      :setScale(0.25)
+      :spawn()
+end
+
+--#ENDREGION
 --#REGION ˚♡ Gaze ♡˚
 
 --#REGION ˚♡ Common ♡˚
@@ -85,14 +99,20 @@ end
 ---@param particle boolean?
 ---@return number, number, boolean
 local function getEyeDir(pos, particle)
-  if particle then
-    particles["minecraft:end_rod"]:setPos(pos):setLifetime(1):spawn()
-  end
-  local targetDir = (pos - getEyePos(player)):normalize()
-  local eyeDir = matrices.mat4():rotate(player:getRot().xy_):apply(targetDir)
+  local eyePos = getEyePos(player)
+  local headRot = player:getRot().xy_
+
+  local zFlip = math.sign((headRot.y + 90) % 360 - 180) -- Fixes gaze variation between facing positive and negative z
+
+  local targetDir = (pos - eyePos):normalize()
+  local eyeDir = matrices.mat4():rotate(headRot:mul(zFlip, 1)):apply(targetDir)
 
   local x, y, z = eyeDir:unpack()
   x = z < 0 and (x <= 0 and 1 or -1) or -x -- Avoid looking through the skull
+
+  if particle then
+    drawLine(eyePos, pos)
+  end
 
   return x, y, z > 0
 end
@@ -118,8 +138,8 @@ local function updateGaze(self, isRender)
   if isRender then
     local delta = client:getFrameTime()
 
-    vanilla_model.HEAD:setOffsetRot(math.lerp(oldOffsetRot, newOffsetRot, delta) *
-      self.config.turnStrength)
+    local offsetRot = math.lerp(oldOffsetRot, newOffsetRot, delta) * self.config.turnStrength
+    vanilla_model.HEAD:setOffsetRot(offsetRot)
     for _, object in pairs(self.children) do object.render(object, delta) end
   else
     local target = viewer:getVariable("FOXGaze.globalGaze") or self.override or self.target
@@ -135,12 +155,10 @@ local function updateGaze(self, isRender)
       end
 
       if target then
-        local gazeParticle = self.config.gazeParticle and self.target.x
-        ---@diagnostic disable-next-line: param-type-mismatch
-        x, y = getEyeDir(gazePos, gazeParticle)
+        x, y = getEyeDir(gazePos, viewer:getVariable("FOXGaze.debugMode"))
       else
         local headRot = ((vanilla_model.HEAD:getOriginRot() + 180) % 360 - 180).xy
-        x, y = vectors.angleToDir(headRot):mul(1, -1):unpack()
+        x, y = vectors.angleToDir(headRot):unpack()
       end
     else
       x, y = target:unpack()
@@ -149,9 +167,7 @@ local function updateGaze(self, isRender)
     oldOffsetRot = newOffsetRot
     newOffsetRot = math.lerp(oldOffsetRot, target and vec(y, -x, 0) or vec(0, 0, 0), 0.5)
 
-    x, y = -x, -y
-
-    for _, object in pairs(self.children) do object.tick(object, x, y, time) end
+    for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
 end
 
@@ -428,7 +444,7 @@ local eyeMeta = {
 function eye:tick(x, y)
   if not self.enabled then return end
 
-  x, y = -x, -y
+  x = -x
 
   local eyeX = x < 0 and x * self.left or x * self.right
   local eyeY = y < 0 and y * self.down or y * self.up
@@ -469,7 +485,7 @@ function anim:tick(x, y)
   if not self.enabled then return end
 
   self.lerp.old = self.lerp.new
-  self.lerp.new = vec(x, y)
+  self.lerp.new = vec(x, -y)
 end
 
 ---@param delta any
@@ -560,7 +576,6 @@ end
 ---@field lookInterval number
 ---@field lookChance number
 ---@field turnStrength number
----@field gazeParticle boolean
 
 ---@class FOXGaze: FOXGaze.Generic
 ---@field package enabled boolean
@@ -702,7 +717,6 @@ function api:newGaze(name)
       lookInterval = 5,
       lookChance = 0.1,
       turnStrength = 22.5,
-      gazeParticle = false,
     },
     children = {},
     seed = objectSeed * nameSeed,
@@ -714,6 +728,11 @@ end
 ---@param target FOXGazeTarget
 function api:setGlobalGaze(target)
   avatar:store("FOXGaze.globalGaze", target)
+end
+
+---@param boolean boolean
+function api:debugMode(boolean)
+  avatar:store("FOXGaze.debugMode", boolean)
 end
 
 --#ENDREGION
