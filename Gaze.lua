@@ -114,7 +114,7 @@ local function updateGaze(self, isRender)
   if isRender then
     local delta = client:getFrameTime()
 
-    vanilla_model.HEAD:setOffsetRot(math.lerp(oldOffsetRot, newOffsetRot, delta) * self.config.turnStrength)
+    --vanilla_model.HEAD:setOffsetRot(math.lerp(oldOffsetRot, newOffsetRot, delta) * self.config.turnStrength)
     for _, object in pairs(self.children) do object.render(object, delta) end
   else
     local target = viewer:getVariable("FOXGaze.globalGaze") or self.override or self.target
@@ -213,10 +213,9 @@ end
 
 ---@param self FOXGaze
 local function swingGaze(self)
-  if self.focus ~= 0 then return end
   if player:getVelocity().x_z:length() < 0.25 and player:getSwingTime() ~= 1 then return end
 
-  self.focus = world.getTime() % self.config.dynamicsCooldown + 1
+  self.focus = self.config.dynamicsCooldown
   self.target = player:getTargetedEntity(5)
 end
 
@@ -233,7 +232,6 @@ end
 ---@param pos Vector3
 ---@param volume number
 local function soundGaze(self, sound, pos, volume)
-  if self.focus ~= 0 then return end
   if string.find(sound, "step") then return end
 
   local distance = (player:getPos() - pos):length()
@@ -254,9 +252,7 @@ end
 ---@param self FOXGaze
 ---@param attacker Entity
 local function damageGaze(self, attacker)
-  if self.focus ~= 0 then return end
-
-  self.focus = world.getTime() % self.config.dynamicsCooldown + 1
+  self.focus = self.config.dynamicsCooldown
   self.target = attacker
 end
 
@@ -272,7 +268,7 @@ end
 ---@param self FOXGaze
 ---@param chatterName string
 local function chatGaze(self, chatterName)
-  self.focus = world.getTime() % self.config.dynamicsCooldown + 1
+  self.focus = self.config.dynamicsCooldown
   self.target = world.getPlayers()[chatterName]
 end
 
@@ -295,31 +291,33 @@ end
 ---Determine gaze from visible blocks or entities
 ---@param self FOXGaze
 local function gazeController(self)
-  swingGaze(self)
-
-  if soundQueue then
-    soundGaze(self, table.unpack(soundQueue))
-  end
-  if damageQueue then
-    damageGaze(self, table.unpack(damageQueue))
-  end
-  if chatQueue then
-    chatGaze(self, table.unpack(chatQueue))
-  end
-
-  if self.focus > 0 then
-    self.focus = self.focus - 1
-    return
-  end
-
   local time = world.getTime()
   self.random.seed = time * self.seed
-  if time % 5 ~= 0 or self.random(100) >= 10 then return end -- Rolls the chance which the player will change their gaze this tick
+
+  if self.focus == 0 then
+     swingGaze(self)
+
+    if soundQueue then
+      soundGaze(self, table.unpack(soundQueue))
+    end
+    if damageQueue then
+      damageGaze(self, table.unpack(damageQueue))
+    end
+    if chatQueue then
+      if self.random(100) < (self.config.socialInterest * 100) then -- nested if is intentional to avoid needless rng roll
+        chatGaze(self, table.unpack(chatQueue))
+      end
+    end
+  elseif self.focus > 0 then
+    self.focus = self.focus - 1
+  end
+
+  if time % self.lookInterval ~= 0 or self.random(100) >= (self.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
 
   local lookDir = player:getLookDir()
   local seenEntities = entityGaze(self, lookDir)
 
-  if #seenEntities ~= 0 and self.random(100) < self.config.socialInterest * 100 then
+  if #seenEntities ~= 0 and self.random(100) < (self.config.socialInterest * 100) then
     local rarityCount = 0
     for _, v in pairs(seenEntities) do
       rarityCount = rarityCount + v.lookChance
@@ -354,6 +352,7 @@ end
 function events.render()
   for _, gazeObject in pairs(gazes) do
     if gazeObject.enabled then
+      log(gazeObject)
       gazeObject(true)
     end
   end
@@ -555,7 +554,7 @@ end
 ---@field package children FOXGaze.Any
 ---@field package seed number
 ---@field package focus number
----@field config {socialInterest: number, soundInterest: number, dynamicsCooldown: number, turnStrength: number}
+---@field config {socialInterest: number, soundInterest: number, dynamicsCooldown: number, lookInterest: number, lookChance: number, turnStrength: number}
 local gaze = {}
 
 local gazeMeta = {
@@ -684,7 +683,9 @@ function api:newGaze(name)
       socialInterest = 0.8,
       soundInterest = 0.5,
       dynamicsCooldown = 40,
-      turnStrength = 22.5,
+      lookInterval = 5,
+      lookChance = 0.1,
+      turnStrength = 0,
     },
     children = {},
     seed = objectSeed * nameSeed,
