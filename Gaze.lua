@@ -82,8 +82,12 @@ end
 
 ---Converts a position relative to where the player is facing
 ---@param pos Vector3
+---@param particle boolean?
 ---@return number, number, boolean
-local function getEyeDir(pos)
+local function getEyeDir(pos, particle)
+  if particle then
+    particles["minecraft:end_rod"]:setPos(pos):setLifetime(1):spawn()
+  end
   local targetDir = (pos - getEyePos(player)):normalize()
   local eyeDir = matrices.mat4():rotate(player:getRot().xy_):apply(targetDir)
 
@@ -98,7 +102,7 @@ end
 ---@return boolean
 local function isObscured(pos)
   local hit = select(2, raycast:block(getEyePos(player), pos, "VISUAL"))
-  local isBehindWall = (hit - pos):length() > 1
+  local isBehindWall = (hit - pos):length() > 0
   return isBehindWall
 end
 
@@ -114,7 +118,8 @@ local function updateGaze(self, isRender)
   if isRender then
     local delta = client:getFrameTime()
 
-    --vanilla_model.HEAD:setOffsetRot(math.lerp(oldOffsetRot, newOffsetRot, delta) * self.config.turnStrength)
+    vanilla_model.HEAD:setOffsetRot(math.lerp(oldOffsetRot, newOffsetRot, delta) *
+      self.config.turnStrength)
     for _, object in pairs(self.children) do object.render(object, delta) end
   else
     local target = viewer:getVariable("FOXGaze.globalGaze") or self.override or self.target
@@ -130,7 +135,9 @@ local function updateGaze(self, isRender)
       end
 
       if target then
-        x, y = getEyeDir(gazePos)
+        local gazeParticle = self.config.gazeParticle and self.target.x
+        ---@diagnostic disable-next-line: param-type-mismatch
+        x, y = getEyeDir(gazePos, gazeParticle)
       else
         local headRot = ((vanilla_model.HEAD:getOriginRot() + 180) % 360 - 180).xy
         x, y = vectors.angleToDir(headRot):mul(1, -1):unpack()
@@ -295,7 +302,7 @@ local function gazeController(self)
   self.random.seed = time * self.seed
 
   if self.focus == 0 then
-     swingGaze(self)
+    swingGaze(self)
 
     if soundQueue then
       soundGaze(self, table.unpack(soundQueue))
@@ -312,7 +319,7 @@ local function gazeController(self)
     self.focus = self.focus - 1
   end
 
-  if time % self.lookInterval ~= 0 or self.random(100) >= (self.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
+  if time % self.config.lookInterval ~= 0 or self.random(100) >= (self.config.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
 
   local lookDir = player:getLookDir()
   local seenEntities = entityGaze(self, lookDir)
@@ -352,7 +359,6 @@ end
 function events.render()
   for _, gazeObject in pairs(gazes) do
     if gazeObject.enabled then
-      log(gazeObject)
       gazeObject(true)
     end
   end
@@ -466,6 +472,7 @@ function anim:tick(x, y)
   self.lerp.new = vec(x, y)
 end
 
+---@param delta any
 function anim:render(delta)
   if not self.enabled then return end
 
@@ -546,6 +553,15 @@ end
 
 ---@class FOXGaze.Any: FOXGaze.Eye, FOXGaze.Animation, FOXGaze.UV, FOXGaze.Blink
 
+---@class FOXGazeConfigs
+---@field socialInterest number
+---@field soundInterest number
+---@field dynamicsCooldown number
+---@field lookInterval number
+---@field lookChance number
+---@field turnStrength number
+---@field gazeParticle boolean
+
 ---@class FOXGaze: FOXGaze.Generic
 ---@field package enabled boolean
 ---@field package target FOXGazeTarget
@@ -554,7 +570,7 @@ end
 ---@field package children FOXGaze.Any
 ---@field package seed number
 ---@field package focus number
----@field config {socialInterest: number, soundInterest: number, dynamicsCooldown: number, lookInterest: number, lookChance: number, turnStrength: number}
+---@field config FOXGazeConfigs
 local gaze = {}
 
 local gazeMeta = {
@@ -582,7 +598,7 @@ function gaze:newEye(element, left, right, up, down, horizontal)
     up = up or 0.5,
     down = down or 0.5,
     horizontal = horizontal,
-    lerp = { old = vec(0, 0), new = vec(0, 0) },
+    lerp = { old = vec(0, 0, 0), new = vec(0, 0, 0) },
   }, eyeMeta)
   table.insert(self.children, object)
   return object
@@ -685,7 +701,8 @@ function api:newGaze(name)
       dynamicsCooldown = 40,
       lookInterval = 5,
       lookChance = 0.1,
-      turnStrength = 0,
+      turnStrength = 22.5,
+      gazeParticle = false,
     },
     children = {},
     seed = objectSeed * nameSeed,
