@@ -2,7 +2,5 @@
 - Fix chat message name detection
 - Make getting eye height safer
 
-- Make a "gaze" an object which can be enabled, disabled, configured, and created.
-- Make gaze objects able to have separate targets and target overrides
 - Add methods for getting the current gaze block or entity
 (Also to allow skulls to have their own gaze that isn't just a mirror of the player's eye position)
