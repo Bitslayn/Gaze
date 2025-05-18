@@ -1,6 +1,0 @@
-- Change photoMode to a viewer override that forces everyone's gaze onto a position or entity
-- Fix chat message name detection
-- Make getting eye height safer
-
-- Add methods for getting the current gaze block or entity
-(Also to allow skulls to have their own gaze that isn't just a mirror of the player's eye position)
