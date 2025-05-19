@@ -34,29 +34,35 @@ end
 
 local randomMetatable = {
   ---@param self Random.Kate
-  __call = function(self, m)
-    local v = math.sin(self.seed) * 43758.5453123
-    local num = v - math.floor(v)
-    self.seed = math.floor(num * ((2 ^ 31) - 1))
-    return math.floor(math.lerp(1, m, num))
+  __call = function(self, a, b)
+    local v = math.sin(self.seed) * 43758.5453123;
+    local num = v - math.floor(v);
+    self.seed = math.floor(num * ((2 ^ 31) - 1));
+    if (type(a) == "number" and type(b) == "number") then
+      return math.floor(math.lerp(a, b, num));
+    elseif (type(a) == "number") then
+      return math.floor(math.lerp(1, a, num))
+    else
+      return num;
+    end
   end,
 }
 
 local random = {}
 
+---@param seed? integer
 ---@return Random.Kate
-function random.new()
-  return setmetatable({ seed = 0 }, randomMetatable)
+function random.new(seed)
+  return setmetatable(
+    {
+      seed = seed or math.random((2 ^ 31) - 1),
+    },
+    randomMetatable
+  )
 end
 
----@param str string
-local function stringRandom(str)
-  local n = 0
-  for _, v in pairs({ string.byte(str, 1, #str) }) do
-    n = n + v
-  end
-  return n
-end
+local avatarUUIDInt = client.uuidToIntArray(avatar:getUUID())
+local uuidRng = random.new(avatarUUIDInt)
 
 --#ENDREGION
 --#REGION ˚♡ Particles ♡˚
@@ -70,6 +76,18 @@ local function drawLine(a, b, color)
       :setColor(color)
       :setScale(0.25)
       :spawn()
+end
+
+--#ENDREGION
+--#REGION ˚♡ UUID Generator ♡˚
+
+---@param rng Random.Kate
+local function newUUID(rng)
+  local ints = {}
+  for _ = 1, 4 do
+    table.insert(ints, rng(-2147483648, 2147483647))
+  end
+  return client.intUUIDToString(table.unpack(ints))
 end
 
 --#ENDREGION
@@ -315,6 +333,8 @@ local function gazeController(self)
   local time = world.getTime()
   local flooredTime = math.floor(time / 10) * 10
   self.random.seed = flooredTime * self.seed
+  self.shouldBlink = time % self.config.blinkFrequency == 0 and self.random(100) < 5
+
   if self.focus > 0 then
     self.focus = self.focus - 1
   end
@@ -400,13 +420,15 @@ end
 --#REGION ˚♡ FOXGaze.Generic ♡˚
 
 ---@class FOXGaze.Generic
+---@field package enabled boolean
+---@field package uuid string
 ---@field package tick fun(self: FOXGaze.Generic, x: number, y: number, time: number)
 ---@field package render fun(self: FOXGaze.Generic, delta: number)
 ---@field package zero fun(self: FOXGaze.Generic)
 local generic = {}
 
 ---@generic self
----@param self self
+---@param self FOXGaze.Generic|self
 ---@return self
 function generic:enable()
   self.enabled = true
@@ -414,7 +436,7 @@ function generic:enable()
 end
 
 ---@generic self
----@param self self
+---@param self FOXGaze.Generic|self
 ---@return self
 function generic:disable()
   self.enabled = false
@@ -422,7 +444,7 @@ function generic:disable()
 end
 
 ---@generic self
----@param self self
+---@param self FOXGaze.Generic|self
 ---@param boolean boolean
 ---@return self
 function generic:setEnabled(boolean)
@@ -430,11 +452,23 @@ function generic:setEnabled(boolean)
   return self
 end
 
+---@generic self
+---@param self FOXGaze.Any|self
+function generic:remove()
+  self.parent.children[self.uuid] = nil
+end
+
+---@generic self
+---@param self FOXGaze.Generic|self
+---@return string
+function generic:getUUID()
+  return self.uuid
+end
+
 --#ENDREGION
 --#REGION ˚♡ FOXGaze.Eye ♡˚
 
 ---@class FOXGaze.Eye: FOXGaze.Generic
----@field package enabled boolean
 ---@field element ModelPart
 ---@field left number
 ---@field right number
@@ -442,6 +476,7 @@ end
 ---@field down number
 ---@field horizontal boolean
 ---@field package lerp {old: Vector3, new: Vector3}
+---@field package parent FOXGaze
 local eye = {}
 
 local eyeMeta = {
@@ -478,10 +513,10 @@ end
 --#REGION ˚♡ FOXGaze.Animation ♡˚
 
 ---@class FOXGaze.Animation: FOXGaze.Generic
----@field package enabled boolean
 ---@field horizontal Animation
 ---@field vertical Animation
 ---@field package lerp {old: Vector2, new: Vector2}
+---@field package parent FOXGaze
 local anim = {}
 
 local animMeta = {
@@ -518,8 +553,8 @@ end
 --#REGION ˚♡ FOXGaze.UV ♡˚
 
 ---@class FOXGaze.UV: FOXGaze.Generic
----@field package enabled boolean
 ---@field element ModelPart
+---@field package parent FOXGaze
 local uv = {}
 
 local uvMeta = {
@@ -548,7 +583,6 @@ end
 --#REGION ˚♡ FOXGaze.Blink ♡˚
 
 ---@class FOXGaze.Blink: FOXGaze.Generic
----@field package enabled boolean
 ---@field animation Animation
 ---@field frequency number
 ---@field package timer number
@@ -562,10 +596,10 @@ local blinkMeta = {
   end,
 }
 
-function blink:tick(_, _, time)
+function blink:tick()
   if not self.enabled then return end
   if player:getPose() == "SLEEPING" then return end
-  if time % self.frequency == 0 and self.parent.random(100) < 5 then
+  if self.parent.shouldBlink then
     self.animation:play()
   end
 end
@@ -587,19 +621,21 @@ end
 ---@field dynamicsCooldown number
 ---@field lookInterval number
 ---@field lookChance number
+---@field blinkFrequency number
 ---@field turnStrength number
 ---@field faceEntities boolean
 ---@field faceBlocks boolean
 ---@field faceDirection boolean
 
 ---@class FOXGaze: FOXGaze.Generic
----@field package enabled boolean
 ---@field package target FOXGazeTarget
 ---@field package override FOXGazeTarget
 ---@field package random Random.Kate
+---@field package uuidRandom Random.Kate
 ---@field package children FOXGaze.Any
 ---@field package seed number
 ---@field package focus number
+---@field package shouldBlink boolean
 ---@field config FOXGazeConfigs
 local gaze = {}
 
@@ -622,6 +658,9 @@ local gazeMeta = {
 function gaze:newEye(element, left, right, up, down, horizontal)
   local object = setmetatable({
     enabled = true,
+    uuid = newUUID(self.uuidRandom),
+    parent = self,
+
     element = element,
     left = left or 0.25,
     right = right or 1.25,
@@ -630,7 +669,7 @@ function gaze:newEye(element, left, right, up, down, horizontal)
     horizontal = horizontal,
     lerp = { old = vec(0, 0, 0), new = vec(0, 0, 0) },
   }, eyeMeta)
-  table.insert(self.children, object)
+  self.children[object.uuid] = object
   return object
 end
 
@@ -647,11 +686,14 @@ function gaze:newAnim(horizontal, vertical)
 
   local object = setmetatable({
     enabled = true,
+    uuid = newUUID(self.uuidRandom),
+    parent = self,
+
     horizontal = horizontal,
     vertical = vertical,
     lerp = { old = vec(0, 0), new = vec(0, 0) },
   }, animMeta)
-  table.insert(self.children, object)
+  self.children[object.uuid] = object
   return object
 end
 
@@ -661,23 +703,26 @@ end
 function gaze:newUV(element)
   local object = setmetatable({
     enabled = true,
+    uuid = newUUID(self.uuidRandom),
+    parent = self,
+
     element = element,
   }, uvMeta)
-  table.insert(self.children, object)
+  self.children[object.uuid] = object
   return object
 end
 
 ---@param animation Animation
----@param frequency number?
 ---@return FOXGaze.Blink
-function gaze:newBlink(animation, frequency)
+function gaze:newBlink(animation)
   local object = setmetatable({
     enabled = true,
-    animation = animation,
-    frequency = frequency or 7,
+    uuid = newUUID(self.uuidRandom),
     parent = self,
+
+    animation = animation,
   }, blinkMeta)
-  table.insert(self.children, object)
+  self.children[object.uuid] = object
   return object
 end
 
@@ -704,6 +749,10 @@ function gaze:zero()
   return self
 end
 
+function gaze:remove()
+  gazes[self.uuid] = nil
+end
+
 --#ENDREGION
 --#REGION ˚♡ FOXGazeAPI ♡˚
 
@@ -712,34 +761,37 @@ end
 ---@class FOXGazeAPI
 local api = {}
 
----@param name string?
 ---@return FOXGaze
-function api:newGaze(name)
-  local objectSeed = client.uuidToIntArray(avatar:getUUID()) % 512 + 1
-  local nameSeed = (name and stringRandom(name) or 0) % 512 + 1
+function api:newGaze()
+  local objectUUID = newUUID(uuidRng)
+  local objectUUIDInt = client.uuidToIntArray(objectUUID)
+  local objectSeed = objectUUIDInt % 2048 + 1
 
   local object = setmetatable({
-    name = name or tostring(math.random()),
     enabled = true,
+    uuid = objectUUID,
     target = nil,
     override = nil,
     random = random.new(),
+    uuidRandom = random.new(objectUUIDInt),
     focus = 0,
+    shouldBlink = false,
     config = {
       socialInterest = 0.8,
       soundInterest = 0.5,
       dynamicsCooldown = 20,
       lookInterval = 5,
       lookChance = 0.1,
+      blinkFrequency = 7,
       turnStrength = 22.5,
       faceEntities = true,
       faceBlocks = false,
       faceDirection = false,
     },
     children = {},
-    seed = objectSeed * nameSeed,
+    seed = objectSeed,
   }, gazeMeta)
-  gazes[object.name] = object
+  gazes[objectUUID] = object
   return object
 end
 

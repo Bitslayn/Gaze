@@ -1,6 +1,0 @@
-✓ Fix the horizontal of eye objects
-✓ Make obscured gazes also set the gaze to nil so you don't immediately gaze at it again
-✓ Make it so if an interest config is 0, that feature is completely disabled and no instructions are used for it
-✓ Make head tilting work based on if you want to tilt your head to face a certain thing
-✓ Make head tilting lerp in its own event and not in update
-- Change named gazes to uuid, give every object a uuid as well. Make everything able to be removed, which removes that uuid. Make gazes have a stable uuid table for running everything in order (or make objects not run their own randoms)
