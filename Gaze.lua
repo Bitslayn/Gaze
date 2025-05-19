@@ -129,17 +129,13 @@ end
 --#ENDREGION
 --#REGION ˚♡ Update ♡˚
 
-local oldOffsetRot, newOffsetRot = vec(0, 0, 0), vec(0, 0, 0)
+local targetOffsetRot, oldOffsetRot, newOffsetRot = vec(0, 0, 0), vec(0, 0, 0), vec(0, 0, 0)
 local viewer = client:getViewer()
 
 ---@param self FOXGaze
----@param isRender boolean
-local function updateGaze(self, isRender)
-  if isRender then
-    local delta = client:getFrameTime()
-
-    local offsetRot = math.lerp(oldOffsetRot, newOffsetRot, delta) * self.config.turnStrength
-    vanilla_model.HEAD:setOffsetRot(offsetRot)
+---@param delta number
+local function updateGaze(self, delta)
+  if delta then
     for _, object in pairs(self.children) do object.render(object, delta) end
   else
     local target = viewer:getVariable("FOXGaze.globalGaze") or self.override or self.target
@@ -148,24 +144,29 @@ local function updateGaze(self, isRender)
     self.random.seed = time * self.seed
 
     local x, y
+    local method
+
     if type(target) ~= "Vector2" then
       local gazePos = getGazePos(target)
       if gazePos and time % 20 == 0 and isObscured(gazePos) then
-        target = nil
+        target, self.target = nil, nil
       end
 
       if target then
         x, y = getEyeDir(gazePos, viewer:getVariable("FOXGaze.debugMode"))
+        method = target.x and "Blocks" or "Entities"
       else
         local headRot = ((vanilla_model.HEAD:getOriginRot() + 180) % 360 - 180).xy
         x, y = vectors.angleToDir(headRot):unpack()
+        method = "Direction"
       end
     else
       x, y = target:unpack()
+      method = "Direction"
     end
 
-    oldOffsetRot = newOffsetRot
-    newOffsetRot = math.lerp(oldOffsetRot, target and vec(y, -x, 0) or vec(0, 0, 0), 0.5)
+    targetOffsetRot = self.config["face" .. method] and vec(y, -x, 0) or vec(0, 0, 0)
+    targetOffsetRot = targetOffsetRot * self.config.turnStrength
 
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
@@ -232,20 +233,12 @@ end
 --#ENDREGION
 --#REGION ˚♡ Contextual (focused) ♡˚
 
--- Set the target gaze to an entity if you're moving fast or swing
-
----@param self FOXGaze
-local function actionGaze(self)
-  self.focus = self.config.dynamicsCooldown
-  self.target = player:getTargetedEntity(5)
-end
-
 -- Set gaze based on sounds
 
 local soundQueue
 
 function events.on_play_sound(sound, pos, volume)
-  soundQueue = { sound, pos, volume, world.getTime()}
+  soundQueue = { sound, pos, volume, world.getTime() }
 end
 
 ---@param self FOXGaze
@@ -253,10 +246,11 @@ end
 ---@param pos Vector3
 ---@param volume number
 local function soundGaze(self, sound, pos, volume)
-  if string.find(sound, "step") then return false end
+  if self.config.soundInterest <= 0 then return end
+  if string.find(sound, "step") then return end
 
   local distance = (player:getPos() - pos):length()
-  if distance < 1 or self.random(100) >= self.config.soundInterest * 200 / distance * volume then return false end
+  if distance < 1 or self.random(100) >= self.config.soundInterest * 200 / distance * volume then return end
   self.focus = self.config.dynamicsCooldown
   self.target = pos
   soundQueue = nil
@@ -291,7 +285,8 @@ end
 ---@param self FOXGaze
 ---@param chatterName string
 local function chatGaze(self, chatterName)
-  if self.random(100) > (self.config.socialInterest * 100) then return false end
+  if self.config.socialInterest <= 0 then return end
+  if self.random(100) > (self.config.socialInterest * 100) then return end
   self.focus = self.config.dynamicsCooldown
   self.target = world.getPlayers()[chatterName]
   chatQueue = nil
@@ -318,13 +313,14 @@ end
 ---@param self FOXGaze
 local function gazeController(self)
   local time = world.getTime()
-  local flooredTime = math.floor(time / 10) * 10 
+  local flooredTime = math.floor(time / 10) * 10
   self.random.seed = flooredTime * self.seed
   if self.focus > 0 then
     self.focus = self.focus - 1
   end
   if player:getVelocity().x_z:length() > 0.25 or player:getSwingTime() == 1 then
-    actionGaze(self)
+    self.focus = self.config.dynamicsCooldown
+    self.target = player:getTargetedEntity(5)
     return
   end
   if self.focus == 0 then
@@ -341,13 +337,13 @@ local function gazeController(self)
   end
 
   if time % self.config.lookInterval ~= 0 or self.random(100) >= (self.config.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
-  
+
   self.random.seed = time * self.seed
 
   local lookDir = player:getLookDir()
   local seenEntities = entityGaze(self, lookDir)
 
-  if #seenEntities ~= 0 and self.random(100) < (self.config.socialInterest * 100) then
+  if self.config.socialInterest > 0 and #seenEntities ~= 0 and self.random(100) < (self.config.socialInterest * 100) then
     local rarityCount = 0
     for _, v in pairs(seenEntities) do
       rarityCount = rarityCount + v.lookChance
@@ -364,7 +360,7 @@ end
 --#ENDREGION
 
 --#ENDREGION
---#REGION ˚♡ Loop ♡˚
+--#REGION ˚♡ Tick & Render ♡˚
 
 ---@type FOXGaze[]
 local gazes = {}
@@ -373,21 +369,27 @@ function events.tick()
   for _, gazeObject in pairs(gazes) do
     if gazeObject.enabled then
       gazeController(gazeObject)
-      gazeObject(false)
+      gazeObject()
     end
   end
+
   local time = world.getTime()
   if soundQueue and (time - soundQueue[4]) >= 60 then soundQueue = nil end
   if damageQueue and (time - damageQueue[2]) >= 60 then damageQueue = nil end
   if chatQueue and (time - chatQueue[2]) >= 60 then chatQueue = nil end
+
+  oldOffsetRot = newOffsetRot
+  newOffsetRot = math.lerp(oldOffsetRot, targetOffsetRot, 0.5)
 end
 
-function events.render()
+function events.render(delta)
   for _, gazeObject in pairs(gazes) do
     if gazeObject.enabled then
-      gazeObject(true)
+      gazeObject(delta)
     end
   end
+
+  vanilla_model.HEAD:setOffsetRot(math.lerp(oldOffsetRot, newOffsetRot, delta))
 end
 
 --#ENDREGION
@@ -456,7 +458,7 @@ function eye:tick(x, y)
 
   x = -x
 
-  local eyeX = x < 0 and x * self.left or x * self.right
+  local eyeX = x < 0 and x * self.right or x * self.left
   local eyeY = y < 0 and y * self.down or y * self.up
 
   self.lerp.old = self.lerp.new
@@ -586,6 +588,9 @@ end
 ---@field lookInterval number
 ---@field lookChance number
 ---@field turnStrength number
+---@field faceEntities boolean
+---@field faceBlocks boolean
+---@field faceDirection boolean
 
 ---@class FOXGaze: FOXGaze.Generic
 ---@field package enabled boolean
@@ -692,7 +697,7 @@ end
 ---@return FOXGaze
 function gaze:zero()
   self.target = nil
-  vanilla_model.HEAD:setOffsetRot()
+  targetOffsetRot = vec(0, 0, 0)
   for _, object in pairs(self.children) do
     object:zero()
   end
@@ -727,6 +732,9 @@ function api:newGaze(name)
       lookInterval = 5,
       lookChance = 0.1,
       turnStrength = 22.5,
+      faceEntities = true,
+      faceBlocks = false,
+      faceDirection = false,
     },
     children = {},
     seed = objectSeed * nameSeed,
