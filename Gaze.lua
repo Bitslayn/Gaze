@@ -176,6 +176,7 @@ local function updateGaze(self, delta)
       else
         local headRot = ((vanilla_model.HEAD:getOriginRot() + 180) % 360 - 180).xy
         x, y = vectors.angleToDir(headRot):unpack()
+        y = -y
         method = "Direction"
       end
     else
@@ -569,7 +570,7 @@ local uvMeta = {
 function uv:tick(x, y)
   if not self.enabled then return end
 
-  local UV = vec(math.round(x), math.round(y)):div(3, 3)
+  local UV = vec(math.round(x), math.round(-y)):div(3, 3)
   self.element:setUV(UV)
 end
 
