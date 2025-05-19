@@ -122,7 +122,7 @@ end
 ---@return boolean
 local function isObscured(pos)
   local hit = select(2, raycast:block(getEyePos(player), pos, "VISUAL"))
-  local isBehindWall = (hit - pos):length() > 0
+  local isBehindWall = (hit - pos):length() > 1
   return isBehindWall
 end
 
@@ -235,9 +235,7 @@ end
 -- Set the target gaze to an entity if you're moving fast or swing
 
 ---@param self FOXGaze
-local function swingGaze(self)
-  if player:getVelocity().x_z:length() < 0.25 and player:getSwingTime() ~= 1 then return end
-
+local function actionGaze(self)
   self.focus = self.config.dynamicsCooldown
   self.target = player:getTargetedEntity(5)
 end
@@ -247,7 +245,7 @@ end
 local soundQueue
 
 function events.on_play_sound(sound, pos, volume)
-  soundQueue = { sound, pos, volume }
+  soundQueue = { sound, pos, volume, world.getTime()}
 end
 
 ---@param self FOXGaze
@@ -255,13 +253,14 @@ end
 ---@param pos Vector3
 ---@param volume number
 local function soundGaze(self, sound, pos, volume)
-  if string.find(sound, "step") then return end
+  if string.find(sound, "step") then return false end
 
   local distance = (player:getPos() - pos):length()
-  if distance < 1 or self.random(100) >= self.config.soundInterest * 200 / distance * volume then return end
-
+  if distance < 1 or self.random(100) >= self.config.soundInterest * 200 / distance * volume then return false end
   self.focus = self.config.dynamicsCooldown
   self.target = pos
+  soundQueue = nil
+  return true
 end
 
 -- Set gaze to attacker if the player takes damage
@@ -269,7 +268,7 @@ end
 local damageQueue
 
 function events.damage(_, attacker)
-  damageQueue = { attacker }
+  damageQueue = { attacker, world.getTime() }
 end
 
 ---@param self FOXGaze
@@ -277,6 +276,7 @@ end
 local function damageGaze(self, attacker)
   self.focus = self.config.dynamicsCooldown
   self.target = attacker
+  damageQueue = nil
 end
 
 -- Set gaze to player that's chatting
@@ -285,14 +285,17 @@ local chatQueue
 
 ---@param chatterName string
 function pings.chatGaze(chatterName)
-  chatQueue = { chatterName }
+  chatQueue = { chatterName, world.getTime() }
 end
 
 ---@param self FOXGaze
 ---@param chatterName string
 local function chatGaze(self, chatterName)
+  if self.random(100) > (self.config.socialInterest * 100) then return false end
   self.focus = self.config.dynamicsCooldown
   self.target = world.getPlayers()[chatterName]
+  chatQueue = nil
+  return true
 end
 
 function events.chat_receive_message(_, json)
@@ -315,27 +318,31 @@ end
 ---@param self FOXGaze
 local function gazeController(self)
   local time = world.getTime()
-  self.random.seed = time * self.seed
-
+  local flooredTime = math.floor(time / 10) * 10 
+  self.random.seed = flooredTime * self.seed
+  if self.focus > 0 then
+    self.focus = self.focus - 1
+  end
+  if player:getVelocity().x_z:length() > 0.25 or player:getSwingTime() == 1 then
+    actionGaze(self)
+    return
+  end
   if self.focus == 0 then
-    swingGaze(self)
-
     if soundQueue then
-      soundGaze(self, table.unpack(soundQueue))
+      if soundGaze(self, table.unpack(soundQueue)) then return end
     end
     if damageQueue then
       damageGaze(self, table.unpack(damageQueue))
+      return
     end
     if chatQueue then
-      if self.random(100) < (self.config.socialInterest * 100) then -- nested if is intentional to avoid needless rng roll
-        chatGaze(self, table.unpack(chatQueue))
-      end
+      if chatGaze(self, table.unpack(chatQueue)) then return end
     end
-  elseif self.focus > 0 then
-    self.focus = self.focus - 1
   end
 
   if time % self.config.lookInterval ~= 0 or self.random(100) >= (self.config.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
+  
+  self.random.seed = time * self.seed
 
   local lookDir = player:getLookDir()
   local seenEntities = entityGaze(self, lookDir)
@@ -369,7 +376,10 @@ function events.tick()
       gazeObject(false)
     end
   end
-  soundQueue, damageQueue, chatQueue = nil, nil, nil
+  local time = world.getTime()
+  if soundQueue and (time - soundQueue[4]) >= 60 then soundQueue = nil end
+  if damageQueue and (time - damageQueue[2]) >= 60 then damageQueue = nil end
+  if chatQueue and (time - chatQueue[2]) >= 60 then chatQueue = nil end
 end
 
 function events.render()
@@ -713,7 +723,7 @@ function api:newGaze(name)
     config = {
       socialInterest = 0.8,
       soundInterest = 0.5,
-      dynamicsCooldown = 40,
+      dynamicsCooldown = 20,
       lookInterval = 5,
       lookChance = 0.1,
       turnStrength = 22.5,
