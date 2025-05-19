@@ -34,17 +34,11 @@ end
 
 local randomMetatable = {
   ---@param self Random.Kate
-  __call = function(self, a, b)
-    local v = math.sin(self.seed) * 43758.5453123;
-    local num = v - math.floor(v);
-    self.seed = math.floor(num * ((2 ^ 31) - 1));
-    if (type(a) == "number" and type(b) == "number") then
-      return math.floor(math.lerp(a, b, num));
-    elseif (type(a) == "number") then
-      return math.floor(math.lerp(1, a, num))
-    else
-      return num;
-    end
+  __call = function(self, a)
+    local v = math.sin(self.seed) * 43758.5453123
+    local num = v - math.floor(v)
+    self.seed = math.floor(num * ((2 ^ 31) - 1))
+    return a and math.floor(math.lerp(1, a, num)) or num
   end,
 }
 
@@ -55,7 +49,7 @@ local random = {}
 function random.new(seed)
   return setmetatable(
     {
-      seed = seed or math.random((2 ^ 31) - 1),
+      seed = seed or 0,
     },
     randomMetatable
   )
@@ -83,11 +77,7 @@ end
 
 ---@param rng Random.Kate
 local function newUUID(rng)
-  local ints = {}
-  for _ = 1, 4 do
-    table.insert(ints, rng(-2147483648, 2147483647))
-  end
-  return client.intUUIDToString(table.unpack(ints))
+  return client.intUUIDToString(rng(2147483647))
 end
 
 --#ENDREGION
@@ -151,13 +141,13 @@ local targetOffsetRot, oldOffsetRot, newOffsetRot = vec(0, 0, 0), vec(0, 0, 0), 
 local viewer = client:getViewer()
 
 ---@param self FOXGaze
----@param delta number
-local function updateGaze(self, delta)
-  if delta then
-    for _, object in pairs(self.children) do object.render(object, delta) end
+---@param time number Delta or time
+---@param isRender boolean
+local function updateGaze(self, time, isRender)
+  if isRender then
+    for _, object in pairs(self.children) do object.render(object, time) end
   else
     local target = viewer:getVariable("FOXGaze.globalGaze") or self.override or self.target
-    local time = world.getTime()
 
     self.random.seed = time * self.seed
 
@@ -184,8 +174,8 @@ local function updateGaze(self, delta)
       method = "Direction"
     end
 
-    targetOffsetRot = self.config["face" .. method] and vec(y, -x, 0) or vec(0, 0, 0)
-    targetOffsetRot = targetOffsetRot * self.config.turnStrength
+    local s = self.config.turnStrength
+    targetOffsetRot = self.config["face" .. method] and vec(y * s, -x * s, 0) or vec(0, 0, 0)
 
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
@@ -330,11 +320,12 @@ end
 
 ---Determine gaze from visible blocks or entities
 ---@param self FOXGaze
-local function gazeController(self)
-  local time = world.getTime()
-  local flooredTime = math.floor(time / 10) * 10
-  self.random.seed = flooredTime * self.seed
+---@param time number
+local function gazeController(self, time)
+  self.random.seed = math.floor(time / 10) * 10 * self.seed
   self.shouldBlink = time % self.config.blinkFrequency == 0 and self.random(100) < 5
+
+  if not self.config.randomGaze then return end
 
   if self.focus > 0 then
     self.focus = self.focus - 1
@@ -386,15 +377,17 @@ end
 ---@type FOXGaze[]
 local gazes = {}
 
-function events.tick()
+local running = false
+
+local function tick()
+  local time = world.getTime()
   for _, gazeObject in pairs(gazes) do
     if gazeObject.enabled then
-      gazeController(gazeObject)
-      gazeObject()
+      gazeController(gazeObject, time)
+      gazeObject(time)
     end
   end
 
-  local time = world.getTime()
   if soundQueue and (time - soundQueue[4]) >= 60 then soundQueue = nil end
   if damageQueue and (time - damageQueue[2]) >= 60 then damageQueue = nil end
   if chatQueue and (time - chatQueue[2]) >= 60 then chatQueue = nil end
@@ -403,10 +396,10 @@ function events.tick()
   newOffsetRot = math.lerp(oldOffsetRot, targetOffsetRot, 0.5)
 end
 
-function events.render(delta)
+local function render(delta)
   for _, gazeObject in pairs(gazes) do
     if gazeObject.enabled then
-      gazeObject(delta)
+      gazeObject(delta, true)
     end
   end
 
@@ -627,6 +620,7 @@ end
 ---@field faceEntities boolean
 ---@field faceBlocks boolean
 ---@field faceDirection boolean
+---@field randomGaze boolean
 
 ---@class FOXGaze: FOXGaze.Generic
 ---@field package target FOXGazeTarget
@@ -657,9 +651,11 @@ local gazeMeta = {
 ---@param horizontal boolean?
 ---@return FOXGaze.Eye
 function gaze:newEye(element, left, right, up, down, horizontal)
+  local uuid = newUUID(self.uuidRandom)
+  assert(not self.children[uuid], "UUID collision occured!", 2)
   local object = setmetatable({
     enabled = true,
-    uuid = newUUID(self.uuidRandom),
+    uuid = uuid,
     parent = self,
 
     element = element,
@@ -685,9 +681,12 @@ function gaze:newAnim(horizontal, vertical)
   horizontal:play():pause():setTime(0.5)
   vertical:play():pause():setTime(0.5)
 
+  local uuid = newUUID(self.uuidRandom)
+  assert(not self.children[uuid], "UUID collision occured!", 2)
+
   local object = setmetatable({
     enabled = true,
-    uuid = newUUID(self.uuidRandom),
+    uuid = uuid,
     parent = self,
 
     horizontal = horizontal,
@@ -702,9 +701,12 @@ end
 ---@param element ModelPart
 ---@return FOXGaze.UV
 function gaze:newUV(element)
+  local uuid = newUUID(self.uuidRandom)
+  assert(not self.children[uuid], "UUID collision occured!", 2)
+
   local object = setmetatable({
     enabled = true,
-    uuid = newUUID(self.uuidRandom),
+    uuid = uuid,
     parent = self,
 
     element = element,
@@ -716,9 +718,12 @@ end
 ---@param animation Animation
 ---@return FOXGaze.Blink
 function gaze:newBlink(animation)
+  local uuid = newUUID(self.uuidRandom)
+  assert(not self.children[uuid], "UUID collision occured!", 2)
+
   local object = setmetatable({
     enabled = true,
-    uuid = newUUID(self.uuidRandom),
+    uuid = uuid,
     parent = self,
 
     animation = animation,
@@ -752,6 +757,11 @@ end
 
 function gaze:remove()
   gazes[self.uuid] = nil
+  if #gazes > 0 then return end
+
+  running = false
+  events.tick:remove(tick)
+  events.render:remove(render)
 end
 
 --#ENDREGION
@@ -765,8 +775,15 @@ local api = {}
 ---@return FOXGaze
 function api:newGaze()
   local objectUUID = newUUID(uuidRng)
+  assert(not gazes[objectUUID], "UUID collision occured!", 2)
   local objectUUIDInt = client.uuidToIntArray(objectUUID)
   local objectSeed = objectUUIDInt % 2048 + 1
+
+  if not running then
+    running = true
+    events.tick:register(tick)
+    events.render:register(render)
+  end
 
   local object = setmetatable({
     enabled = true,
@@ -788,6 +805,7 @@ function api:newGaze()
       faceEntities = true,
       faceBlocks = false,
       faceDirection = false,
+      randomGaze = true
     },
     children = {},
     seed = objectSeed,
