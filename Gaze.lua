@@ -214,6 +214,9 @@ local function updateGaze(self, time, isRender)
         end
         x, y = vectors.angleToDir(headRot):unpack()
         y = -y
+        if self.head then
+          x, y = -x, -y
+        end
         method = "Direction"
       end
     else
@@ -976,6 +979,21 @@ function api:unsetPrimary()
 end
 
 --#ENDREGION
+
+--#ENDREGION
+--#REGION ˚♡ FOXLib ♡˚
+
+-- This exposes information like library version and name to your avatar vars. This is helpful with debugging
+
+-- DO NOT TOUCH
+
+local _NAME = "Gaze"
+local _VER = "1.0.0"
+local _BRANCH = "dev2"
+
+_FOX = _FOX or {}
+_FOX[_NAME] = {name = _NAME, ver = _VER, branch = _BRANCH}
+avatar:store("FOXLib", _FOX)
 
 --#ENDREGION
 
