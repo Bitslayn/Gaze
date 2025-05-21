@@ -3,11 +3,12 @@ ____  ___ __   __
 | __|/ _ \\ \ / /
 | _|| (_) |> w <
 |_|  \___//_/ \_\
-FOX's Gaze API v1.0.0-dev2
+FOX's Gaze API v1.0.0
 
 Contributors:
   ChloeSpacedOut - Automatic Gaze
   Lexize - Deterministic Random
+  Vicky - Wiki
 
 Testers: Jcera, XanderCrates, OhItsElectric, AuriaFoxGirl
 
@@ -63,12 +64,17 @@ local uuidRng = random.new(avatarUUIDInt)
 
 ---@param a Vector3
 ---@param b Vector3
-local function drawLine(a, b, color)
+local function drawLine(a, b)
   particles["minecraft:end_rod"]
       :setPos(math.lerp(a, b, math.random()))
       :setLifetime(math.round((a - b):length()))
-      :setColor(color)
       :setScale(0.25)
+      :spawn()
+  particles["minecraft:end_rod"]
+      :setPos(b)
+      :setLifetime(1)
+      :setScale(0.5)
+      :setColor(vectors.hexToRGB("#fc6c85"))
       :spawn()
 end
 
@@ -184,6 +190,9 @@ local viewer = client:getViewer()
 local function updateGaze(self, time, isRender)
   if isRender then
     if self.head then
+      if self.isPrimary then
+        self.head:setRot(vanilla_model.HEAD:getOriginRot())
+      end
       self.head:setOffsetRot(math.lerp(self.headRot.old, self.headRot.new, time))
     end
 
@@ -229,7 +238,7 @@ local function updateGaze(self, time, isRender)
 
     self.headRot.old = self.headRot.new
     ---@diagnostic disable-next-line: assign-type-mismatch
-    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, 0.5)
+    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, self.config.turnSpeed)
 
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
@@ -450,7 +459,8 @@ local function tick()
 
   primaryGaze.headRot.old = primaryGaze.headRot.new
   ---@diagnostic disable-next-line: assign-type-mismatch
-  primaryGaze.headRot.new = math.lerp(primaryGaze.headRot.old, primaryGaze.headRot.target, 0.5)
+  primaryGaze.headRot.new = math.lerp(primaryGaze.headRot.old, primaryGaze.headRot.target,
+    primaryGaze.config.turnSpeed)
 end
 
 local function render(delta)
@@ -695,6 +705,7 @@ end
 ---@field lookChance number `0.1` A number from 0 to 1, the chance at which the gaze will automatically change
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
 ---@field turnStrength number `22.5` The furthest the head should rotate in a single direction
+---@field turnSpeed number `0.1` A number from 0 to 1, how fast the head should be lerped
 ---@field faceEntities boolean `true` Whether the head should rotate when the gaze looks at entities
 ---@field faceBlocks boolean `false` Whether the head should rotate when the gaze looks at blocks
 ---@field faceDirection boolean `false` Whether the head should rotate when there are no gaze targets, or the player is focused
@@ -879,11 +890,12 @@ function gaze:remove()
 end
 
 ---Sets the current gaze as primary, allowing this gaze to set the vanilla head offset rotation
+---@return FOXGaze
 function gaze:setAsPrimary()
-  assert(not self.head, "A gaze with a head ModelPart cannot be set as primary!")
   primaryGaze.isPrimary = false
   self.isPrimary = true
   primaryGaze = self
+  return self
 end
 
 --#ENDREGION
@@ -915,7 +927,7 @@ function api:newGaze(head, eyePivot)
   local object = setmetatable({
     enabled = true,
     uuid = objectUUID,
-    isPrimary = not (head or primaryGaze) and true or false,
+    isPrimary = not primaryGaze,
     head = head,
     eyePivot = eyePivot,
     ---@class FOXGazeHeadLerp
@@ -939,6 +951,7 @@ function api:newGaze(head, eyePivot)
       lookChance = 0.1,
       blinkFrequency = 7,
       turnStrength = 22.5,
+      turnSpeed = 0.3,
       faceEntities = true,
       faceBlocks = false,
       faceDirection = false,
@@ -989,10 +1002,10 @@ end
 
 local _NAME = "Gaze"
 local _VER = "1.0.0"
-local _BRANCH = "dev2"
+local _BRANCH = "dev"
 
 _FOX = _FOX or {}
-_FOX[_NAME] = {name = _NAME, ver = _VER, branch = _BRANCH}
+_FOX[_NAME] = { name = _NAME, ver = _VER, branch = _BRANCH }
 avatar:store("FOXLib", _FOX)
 
 --#ENDREGION
