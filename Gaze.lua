@@ -240,6 +240,7 @@ local function updateGaze(self, time, isRender)
     ---@diagnostic disable-next-line: assign-type-mismatch
     self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, 1 - self.config.turnDampen)
 
+    ---@diagnostic disable-next-line: redundant-parameter
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
 end
@@ -699,7 +700,9 @@ local blinkMeta = {
 ---@return self
 ---@package
 function blink:tick()
-  if not (self.enabled and self.parent.shouldBlink) or player:getPose() == "SLEEPING" then return self end
+  if not (self.enabled and self.parent.shouldBlink) or player:getPose() == "SLEEPING" then
+    return self
+  end
   self.animation:play()
   return self
 end
