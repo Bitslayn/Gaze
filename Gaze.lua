@@ -238,7 +238,7 @@ local function updateGaze(self, time, isRender)
 
     self.headRot.old = self.headRot.new
     ---@diagnostic disable-next-line: assign-type-mismatch
-    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, self.config.turnSpeed)
+    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, self.config.turnDampen)
 
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
@@ -460,7 +460,7 @@ local function tick()
   primaryGaze.headRot.old = primaryGaze.headRot.new
   ---@diagnostic disable-next-line: assign-type-mismatch
   primaryGaze.headRot.new = math.lerp(primaryGaze.headRot.old, primaryGaze.headRot.target,
-    primaryGaze.config.turnSpeed)
+    primaryGaze.config.turnDampen)
 end
 
 local function render(delta)
@@ -586,6 +586,7 @@ end
 ---@class FOXGaze.Animation: FOXGaze.Generic
 ---@field horizontal Animation
 ---@field vertical Animation
+---@field dampen number
 ---@field package lerp {old: Vector2, new: Vector2}
 ---@field package parent FOXGaze
 local anim = {}
@@ -605,7 +606,8 @@ function anim:tick(x, y)
   if not self.enabled then return end
 
   self.lerp.old = self.lerp.new
-  self.lerp.new = vec(x, -y)
+  ---@diagnostic disable-next-line: assign-type-mismatch
+  self.lerp.new = math.lerp(self.lerp.old, vec(x, -y), self.dampen)
 end
 
 ---Lerps this animation's time
@@ -705,7 +707,7 @@ end
 ---@field lookChance number `0.1` A number from 0 to 1, the chance at which the gaze will automatically change
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
 ---@field turnStrength number `22.5` The furthest the head should rotate in a single direction
----@field turnSpeed number `0.1` A number from 0 to 1, how fast the head should be lerped
+---@field turnDampen number `0.3` A number from 0 to 1, how fast the head should be lerped
 ---@field faceEntities boolean `true` Whether the head should rotate when the gaze looks at entities
 ---@field faceBlocks boolean `false` Whether the head should rotate when the gaze looks at blocks
 ---@field faceDirection boolean `false` Whether the head should rotate when there are no gaze targets, or the player is focused
@@ -779,11 +781,14 @@ end
 ---The horizontal animation should look negative x or left at 0 seconds, center at 0.5 seconds, and positive x or right at 1 seconds
 ---
 ---The vertical animation should look up at 0 seconds, center at 0.5 seconds, and down at 1 seconds
+---
+---The dampen argument can be a number from 0 to 1, with 0 being default.
 ---@param self FOXGaze
 ---@param horizontal Animation
 ---@param vertical Animation
+---@param dampen number?
 ---@return FOXGaze.Animation
-function gaze:newAnim(horizontal, vertical)
+function gaze:newAnim(horizontal, vertical, dampen)
   local check = (horizontal and horizontal.play) and (vertical and vertical.play)
   assert(check, "Illegal arguments! Expected 2 animations!", 2)
 
@@ -799,6 +804,7 @@ function gaze:newAnim(horizontal, vertical)
     parent = self,
     horizontal = horizontal,
     vertical = vertical,
+    dampen = dampen or 0,
     lerp = { old = vec(0, 0), new = vec(0, 0) },
   }, animMeta)
   self.children[object.uuid] = object
@@ -951,7 +957,7 @@ function api:newGaze(head, eyePivot)
       lookChance = 0.1,
       blinkFrequency = 7,
       turnStrength = 22.5,
-      turnSpeed = 0.3,
+      turnDampen = 0.3,
       faceEntities = true,
       faceBlocks = false,
       faceDirection = false,
