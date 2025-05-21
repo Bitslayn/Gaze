@@ -607,7 +607,7 @@ function anim:tick(x, y)
 
   self.lerp.old = self.lerp.new
   ---@diagnostic disable-next-line: assign-type-mismatch
-  self.lerp.new = math.lerp(self.lerp.old, vec(x, -y), self.dampen)
+  self.lerp.new = math.lerp(self.lerp.old, vec(x, -y), 1 - self.dampen)
 end
 
 ---Lerps this animation's time
@@ -1008,7 +1008,7 @@ end
 
 local _NAME = "Gaze"
 local _VER = "1.0.0"
-local _BRANCH = "dev"
+local _BRANCH = "main"
 
 _FOX = _FOX or {}
 _FOX[_NAME] = { name = _NAME, ver = _VER, branch = _BRANCH }
