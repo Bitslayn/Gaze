@@ -554,9 +554,10 @@ local eyeMeta = {
 ---Updates this eye's target position
 ---@param x number
 ---@param y number
+---@return self
 ---@package
 function eye:tick(x, y)
-  if not self.enabled then return end
+  if not self.enabled then return self end
 
   x = -x
 
@@ -565,19 +566,24 @@ function eye:tick(x, y)
 
   self.lerp.old = self.lerp.new
   self.lerp.new = self.side and vec(0, eyeY, eyeX) or vec(eyeX, eyeY, 0)
+  return self
 end
 
 ---Lerps this eye's position
+---@return self
 ---@package
 function eye:render(delta)
-  if not self.enabled then return end
+  if not self.enabled then return self end
 
   self.element:setPos(math.lerp(self.lerp.old, self.lerp.new, delta))
+  return self
 end
 
 ---Sets this eye's target position to its initial position
+---@return self
 function eye:zero()
   self.element:setPos()
+  return self
 end
 
 --#ENDREGION
@@ -601,30 +607,36 @@ local animMeta = {
 ---Updates this animation's target time
 ---@param x number
 ---@param y number
+---@return self
 ---@package
 function anim:tick(x, y)
-  if not self.enabled then return end
+  if not self.enabled then return self end
 
   self.lerp.old = self.lerp.new
   ---@diagnostic disable-next-line: assign-type-mismatch
   self.lerp.new = math.lerp(self.lerp.old, vec(x, -y), 1 - self.dampen)
+  return self
 end
 
 ---Lerps this animation's time
 ---@param delta any
+---@return self
 ---@package
 function anim:render(delta)
-  if not self.enabled then return end
+  if not self.enabled then return self end
 
   local x, y = math.lerp(self.lerp.old, self.lerp.new, delta):add(1, 1):div(2, 2):unpack()
   self.horizontal:setTime(x)
   self.vertical:setTime(y)
+  return self
 end
 
 ---Sets this animation's target time to 0.5
+---@return self
 function anim:zero()
   self.horizontal:setTime(0.5)
   self.vertical:setTime(0.5)
+  return self
 end
 
 --#ENDREGION
@@ -645,21 +657,26 @@ local uvMeta = {
 ---Sets the UV
 ---@param x number
 ---@param y number
+---@return self
 ---@package
 function uv:tick(x, y)
-  if not self.enabled then return end
+  if not self.enabled then return self end
 
   local UV = vec(math.round(x), math.round(-y)):div(3, 3)
   self.element:setUV(UV)
+  return self
 end
 
 ---Does nothing
+---@return self
 ---@package
-function uv:render() end
+function uv:render() return self end
 
 ---Sets the UV back to the initial UV
+---@return self
 function uv:zero()
   self.element:setUV()
+  return self
 end
 
 --#ENDREGION
@@ -679,19 +696,24 @@ local blinkMeta = {
 }
 
 ---Plays the blink animation if it's time to blink
+---@return self
 ---@package
 function blink:tick()
-  if not (self.enabled and self.parent.shouldBlink) or player:getPose() == "SLEEPING" then return end
+  if not (self.enabled and self.parent.shouldBlink) or player:getPose() == "SLEEPING" then return self end
   self.animation:play()
+  return self
 end
 
 ---Does nothing
+---@return self
 ---@package
-function blink:render() end
+function blink:render() return self end
 
 ---Stops playing the blinking animation if it's playing
+---@return self
 function blink:zero()
   self.animation:stop()
+  return self
 end
 
 --#ENDREGION
@@ -725,7 +747,7 @@ end
 ---@field package focus number
 ---@field package shouldBlink boolean
 ---@field config FOXGazeConfigs This gaze's configs
----@field children FOXGaze.Any Stores all the created eyes, anims, UVs, and blinks for this gaze
+---@field children table<string, FOXGaze.Any> Stores all the created eyes, anims, UVs, and blinks for this gaze
 ---@field package seed number
 local gaze = {}
 
