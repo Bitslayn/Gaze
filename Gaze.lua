@@ -238,7 +238,7 @@ local function updateGaze(self, time, isRender)
 
     self.headRot.old = self.headRot.new
     ---@diagnostic disable-next-line: assign-type-mismatch
-    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, self.config.turnDampen)
+    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, 1 - self.config.turnDampen)
 
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
   end
@@ -460,7 +460,7 @@ local function tick()
   primaryGaze.headRot.old = primaryGaze.headRot.new
   ---@diagnostic disable-next-line: assign-type-mismatch
   primaryGaze.headRot.new = math.lerp(primaryGaze.headRot.old, primaryGaze.headRot.target,
-    primaryGaze.config.turnDampen)
+    1 - primaryGaze.config.turnDampen)
 end
 
 local function render(delta)
@@ -707,7 +707,7 @@ end
 ---@field lookChance number `0.1` A number from 0 to 1, the chance at which the gaze will automatically change
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
 ---@field turnStrength number `22.5` The furthest the head should rotate in a single direction
----@field turnDampen number `0.3` A number from 0 to 1, how fast the head should be lerped
+---@field turnDampen number `0.7` A number from 0 to 1, with 0 being default with no dampening, and 1 being your head doesn't turn at all.
 ---@field faceEntities boolean `true` Whether the head should rotate when the gaze looks at entities
 ---@field faceBlocks boolean `false` Whether the head should rotate when the gaze looks at blocks
 ---@field faceDirection boolean `false` Whether the head should rotate when there are no gaze targets, or the player is focused
@@ -782,7 +782,7 @@ end
 ---
 ---The vertical animation should look up at 0 seconds, center at 0.5 seconds, and down at 1 seconds
 ---
----The dampen argument can be a number from 0 to 1, with 0 being default.
+---The dampen argument can be a number from 0 to 1, with 0 being default with no dampening, and 1 being your animation doesn't play at all.
 ---@param self FOXGaze
 ---@param horizontal Animation
 ---@param vertical Animation
@@ -957,7 +957,7 @@ function api:newGaze(head, eyePivot)
       lookChance = 0.1,
       blinkFrequency = 7,
       turnStrength = 22.5,
-      turnDampen = 0.3,
+      turnDampen = 0.7,
       faceEntities = true,
       faceBlocks = false,
       faceDirection = false,
@@ -1008,7 +1008,7 @@ end
 
 local _NAME = "Gaze"
 local _VER = "1.0.0"
-local _BRANCH = "main"
+local _BRANCH = "dev"
 
 _FOX = _FOX or {}
 _FOX[_NAME] = { name = _NAME, ver = _VER, branch = _BRANCH }
