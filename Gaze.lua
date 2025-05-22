@@ -132,7 +132,7 @@ end
 ---Returns the gaze pos, getting it from the entity eye height if the target is an entity
 ---
 ---Only used for gaze targets
----@param target FOXGazeTarget
+---@param target Vector2|Vector3|Entity?
 ---@return Vector3
 local function getTargetPos(target)
   return target and target.getUUID and getEyePos(target --[[@as Entity]]) or
@@ -207,7 +207,7 @@ local function updateGaze(self, time, isRender)
 
     if type(target) ~= "Vector2" then
       local gazePos = getTargetPos(target)
-      if gazePos and time % 20 == 0 and isObscured(self, gazePos) then
+      if target == self.target and gazePos and time % 20 == 0 and isObscured(self, gazePos) then
         target, self.target = nil, nil
       end
 
@@ -509,22 +509,20 @@ end
 ---Sets this FOXGaze object's enabled state
 ---@generic self
 ---@param self FOXGaze.Generic|self
----@param boolean boolean
+---@param enabled boolean
 ---@return self
-function generic:setEnabled(boolean)
-  self.enabled = boolean
+function generic:setEnabled(enabled)
+  self.enabled = enabled
   return self
 end
 
 ---Permanently removes this FOXGaze object
----@generic self
 ---@param self FOXGaze.Any|self
 function generic:remove()
   self.parent.children[self.uuid] = nil
 end
 
 ---Returns the UUID of this FOXGaze object
----@generic self
 ---@param self FOXGaze.Generic|self
 ---@return string
 function generic:getUUID()
@@ -535,12 +533,12 @@ end
 --#REGION ˚♡ FOXGaze.Eye ♡˚
 
 ---@class FOXGaze.Eye: FOXGaze.Generic
----@field element ModelPart
----@field left number
----@field right number
----@field up number
----@field down number
----@field side boolean
+---@field element ModelPart The eye ModelPart
+---@field left number How far to the left this eye can move from its initial position
+---@field right number How far to the right this eye can move from its initial position
+---@field up number How far up this eye can move from its initial position
+---@field down number How far down this eye can move from its initial position
+---@field side boolean If this eye is on the side of the head
 ---@field package lerp {old: Vector3, new: Vector3}
 ---@field package parent FOXGaze
 local eye = {}
@@ -591,9 +589,9 @@ end
 --#REGION ˚♡ FOXGaze.Animation ♡˚
 
 ---@class FOXGaze.Animation: FOXGaze.Generic
----@field horizontal Animation
----@field vertical Animation
----@field dampen number
+---@field horizontal Animation The horizontal animation
+---@field vertical Animation The vertical animation
+---@field dampen number How much dampening should be applied when lerping the animations
 ---@field package lerp {old: Vector2, new: Vector2}
 ---@field package parent FOXGaze
 local anim = {}
@@ -644,7 +642,7 @@ end
 --#REGION ˚♡ FOXGaze.UV ♡˚
 
 ---@class FOXGaze.UV: FOXGaze.Generic
----@field element ModelPart
+---@field element ModelPart The ModelPart to apply UV transformations to
 ---@field package parent FOXGaze
 local uv = {}
 
@@ -684,7 +682,7 @@ end
 --#REGION ˚♡ FOXGaze.Blink ♡˚
 
 ---@class FOXGaze.Blink: FOXGaze.Generic
----@field animation Animation
+---@field animation Animation The blinking animation
 ---@field package timer number
 ---@field package parent FOXGaze
 local blink = {}
@@ -743,8 +741,8 @@ end
 ---@field package head ModelPart?
 ---@field package eyePivot ModelPart?
 ---@field package headRot FOXGazeHeadLerp
----@field package target FOXGazeTarget?
----@field package override FOXGazeTarget?
+---@field package target Vector2|Vector3|Entity?
+---@field package override Vector2|Vector3|Entity?
 ---@field package random Random.Kate
 ---@field package uuidRandom Random.Kate
 ---@field package focus number
@@ -774,12 +772,12 @@ local gazeMeta = {
 ---
 ---If the eye is on the side of the head, make set side to true
 ---@param self FOXGaze
----@param element ModelPart
----@param left number?
----@param right number?
----@param up number?
----@param down number?
----@param side boolean?
+---@param element ModelPart The eye ModelPart
+---@param left number? `0.25` How far to the left this eye can move from its initial position
+---@param right number? `1.25` How far to the right this eye can move from its initial position
+---@param up number? `0.5` How far up this eye can move from its initial position
+---@param down number? `0.5` How far down this eye can move from its initial position
+---@param side boolean? `false` If this eye is on the side of the head. If this is a left eye, the left and right bounds should be negative.
 ---@return FOXGaze.Eye
 function gaze:newEye(element, left, right, up, down, side)
   assert(type(element) == "ModelPart", "ModelPart expected!", 2)
@@ -809,9 +807,9 @@ end
 ---
 ---The dampen argument can be a number from 0 to 1, with 0 being default with no dampening, and 1 being your animation doesn't play at all.
 ---@param self FOXGaze
----@param horizontal Animation
----@param vertical Animation
----@param dampen number?
+---@param horizontal Animation The horizontal animation
+---@param vertical Animation The vertical animation
+---@param dampen number? `0` How much dampening should be applied when lerping the animations
 ---@return FOXGaze.Animation
 function gaze:newAnim(horizontal, vertical, dampen)
   local check = (horizontal and horizontal.play) and (vertical and vertical.play)
@@ -842,7 +840,7 @@ end
 ---
 ---The top right face should look up-right, and the bottom left face should look bottom-left
 ---@param self FOXGaze
----@param element ModelPart
+---@param element ModelPart The ModelPart to apply UV transformations to. This should NOT just be your head ModelPart
 ---@return FOXGaze.UV
 function gaze:newUV(element)
   assert(type(element) == "ModelPart", "ModelPart expected!", 2)
@@ -862,7 +860,7 @@ end
 ---Creates a new blink animation
 ---
 ---The animation will play randomly when the player isn't sleeping
----@param animation Animation
+---@param animation Animation The blinking animation
 ---@return FOXGaze.Blink
 function gaze:newBlink(animation)
   assert(type(animation) == "Animation", "Blink animation expected!", 2)
@@ -880,7 +878,15 @@ function gaze:newBlink(animation)
 end
 
 ---Sets this gaze's target override
----@param target FOXGazeTarget
+---
+---If this is a Vector2, it moves your eyes to that position on the face, starting from 0, 0 being the center, 1, 1 being upper left, and -1, -1 being lower left.
+---
+---If this is a Vector3, makes the eyes track that block coordinate.
+---
+---If this is an entity, makes the eyes track that entity.
+---
+---If this is nil, unsets the current override.
+---@param target Vector2|Vector3|Entity?
 ---@return FOXGaze
 function gaze:setTargetOverride(target)
   self.override = target
@@ -888,13 +894,13 @@ function gaze:setTargetOverride(target)
 end
 
 ---Returns the target or nil
----@return FOXGazeTarget?
+---@return Vector2|Vector3|Entity?
 function gaze:getTarget()
   return self.target
 end
 
 ---Returns the target override or nil
----@return FOXGazeTarget?
+---@return Vector2|Vector3|Entity?
 function gaze:getTargetOverride()
   return self.override
 end
@@ -932,16 +938,14 @@ end
 --#ENDREGION
 --#REGION ˚♡ FOXGazeAPI ♡˚
 
----@alias FOXGazeTarget Vector2|Vector3|Entity
-
 ---@class FOXGazeAPI
 local api = {}
 
 ---Creates a new gaze. A gaze controls looking and can be created per head
 ---
 ---Gazes can have eyes, animations that follow your gaze, UV eyes, and blinking animations.
----@param head ModelPart?
----@param eyePivot ModelPart?
+---@param head ModelPart? The head ModelPart
+---@param eyePivot ModelPart? A pivot where your eyes are on the head ModelPart
 ---@return FOXGaze
 function api:newGaze(head, eyePivot)
   local objectUUID = newUUID(uuidRng)
@@ -997,13 +1001,23 @@ function api:newGaze(head, eyePivot)
 end
 
 ---Sets the target override for all gazes of all players. This is only applied on the host.
----@param target FOXGazeTarget
+---
+---If this is a Vector2, it moves your eyes to that position on the face, starting from 0, 0 being the center, 1, 1 being upper left, and -1, -1 being lower left.
+---
+---If this is a Vector3, makes the eyes track that block coordinate.
+---
+---If this is an entity, makes the eyes track that entity.
+---
+---If this is nil, unsets the current override.
+---@param target Vector2|Vector3|Entity?
+---@return self
 function api:setGlobalTargetOverride(target)
   avatar:store("FOXGaze.globalTarget", target)
+  return self
 end
 
 ---Returns the viewer's target override
----@return FOXGazeTarget target
+---@return Vector2|Vector3|Entity? target
 function api:getGlobalTargetOverride()
   return viewer:getVariable("FOXGaze.globalTarget")
 end
@@ -1011,15 +1025,19 @@ end
 ---Sets the enabled state for debug mode
 ---
 ---Debug mode draws a line of particles from all gazes of all players to their gaze targets. This is only seen by the host.
----@param boolean boolean
-function api:debugMode(boolean)
-  avatar:store("FOXGaze.debugMode", boolean)
+---@param enabled boolean
+---@return self
+function api:debugMode(enabled)
+  avatar:store("FOXGaze.debugMode", enabled)
+  return self
 end
 
 ---Makes the current primary gaze no longer primary
+---@return self
 function api:unsetPrimary()
   primaryGaze.isPrimary = false
   primaryGaze = nil
+  return self
 end
 
 --#ENDREGION
