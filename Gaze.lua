@@ -740,7 +740,7 @@ end
 ---@field socialInterest number `0.8` A number from 0 to 1, how interested this gaze is in entities, 0 being completely uninterested
 ---@field soundInterest number `0.5` A number from 0 to 1, how interested this gaze is in sounds, 0 being completely uninterested
 ---@field gazeCooldown number `20` After an action takes focus (i.e. played sound or chat message), how many ticks until another action can take away focus. Doesn't apply to random focuses
----@field actionCooldown number `20` How long after doing an action or looking at an entity should you
+---@field actionCooldown number `100` How long after swinging, moving fast, or looking at an entity should gaze lose focus and become random
 ---@field lookInterval number `5` How often in ticks the gaze has a chance to change
 ---@field lookChance number `0.1` A number from 0 to 1, the chance at which the gaze will automatically change
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
