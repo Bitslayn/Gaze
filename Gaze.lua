@@ -132,7 +132,7 @@ end
 ---Returns the gaze pos, getting it from the entity eye height if the target is an entity
 ---
 ---Only used for gaze targets
----@param target FOXGazeTarget
+---@param target FOXGazeTargets?
 ---@return Vector3
 local function getTargetPos(target)
   return target and target.getUUID and getEyePos(target --[[@as Entity]]) or
@@ -198,9 +198,10 @@ local function updateGaze(self, time, isRender)
 
     for _, object in pairs(self.children) do object.render(object, time) end
   else
-    local target = viewer:getVariable("FOXGaze.globalTarget") or self.override or self.target
+    local target = viewer:getVariable("FOXGaze.globalTarget") or self.override or
+        (not self.targets.isAction and self.targets.main or self.targets.action)
 
-    self.random.seed = time * self.seed
+    self.rng.main.seed = time * self.seed
 
     local x, y
     local method
@@ -208,7 +209,11 @@ local function updateGaze(self, time, isRender)
     if type(target) ~= "Vector2" then
       local gazePos = getTargetPos(target)
       if gazePos and time % 20 == 0 and isObscured(self, gazePos) then
-        target, self.target = nil, nil
+        if self.targets.isAction and target == self.targets.action then
+          target, self.targets.action = nil, nil
+        elseif target == self.targets.main then
+          target, self.targets.main = nil, nil
+        end
       end
 
       if target then
@@ -246,16 +251,16 @@ local function updateGaze(self, time, isRender)
 end
 
 --#ENDREGION
---#REGION ˚♡ Focus ♡˚
+--#REGION ˚♡ Random Gaze ♡˚
 
---#REGION ˚♡ Random (unfocused) ♡˚
+--#REGION ˚♡ Random ♡˚
 
 -- Written by ChloeSpacedOut :3
 
 ---@param self FOXGaze
 ---@param lookDir Vector3
 local function blockGaze(self, lookDir)
-  local lookOffset = vec(self.random(100) - 50, self.random(100) - 50)
+  local lookOffset = vec(self.rng.main(100) - 50, self.rng.main(100) - 50)
   local lookRot = vectors.rotateAroundAxis(lookOffset.x, lookDir, vec(1, 0, 0))
   lookRot = vectors.rotateAroundAxis(lookOffset.y, lookRot, vec(0, 1, 0))
   local eyePos = self.head and getHeadPos(self) or getEyePos(player)
@@ -297,14 +302,14 @@ local function pullRandomEntity(self, seenEntities, rarityCount)
   local count = 0
   for _, seenEntity in ipairs(seenEntities) do
     count = count + seenEntity.lookChance
-    if count >= self.random(rarityCount) then
+    if count >= self.rng.main(rarityCount) then
       return seenEntity.entity
     end
   end
 end
 
 --#ENDREGION
---#REGION ˚♡ Contextual (focused) ♡˚
+--#REGION ˚♡ Contextual ♡˚
 
 -- Set gaze based on sounds
 
@@ -323,9 +328,9 @@ local function soundGaze(self, sound, pos, volume)
   if string.find(sound, "step") then return end
 
   local distance = (player:getPos() - pos):length()
-  if distance < 1 or self.random(100) >= self.config.soundInterest * 200 / distance * volume then return end
-  self.focus = self.config.actionCooldown
-  self.target = pos
+  if distance < 1 or self.rng.main(100) >= self.config.soundInterest * 200 / distance * volume then return end
+  self.cooldowns.gaze = self.config.gazeCooldown
+  self.targets.main = pos
   soundQueue = nil
   return true
 end
@@ -341,8 +346,8 @@ end
 ---@param self FOXGaze
 ---@param attacker Entity
 local function damageGaze(self, attacker)
-  self.focus = self.config.actionCooldown
-  self.target = attacker
+  self.cooldowns.gaze = self.config.gazeCooldown
+  self.targets.main = attacker
   damageQueue = nil
 end
 
@@ -359,9 +364,9 @@ end
 ---@param chatterName string
 local function chatGaze(self, chatterName)
   if self.config.socialInterest <= 0 then return end
-  if self.random(100) > (self.config.socialInterest * 100) then return end
-  self.focus = self.config.actionCooldown
-  self.target = world.getPlayers()[chatterName]
+  if self.rng.main(100) > (self.config.socialInterest * 100) then return end
+  self.cooldowns.gaze = self.config.gazeCooldown
+  self.targets.main = world.getPlayers()[chatterName]
   chatQueue = nil
   return true
 end
@@ -386,20 +391,15 @@ end
 ---@param self FOXGaze
 ---@param time number
 local function gazeController(self, time)
-  self.random.seed = math.floor(time / 10) * 10 * self.seed
-  self.shouldBlink = time % self.config.blinkFrequency == 0 and self.random(100) < 5
+  self.rng.main.seed = math.floor(time / 10) * 10 * self.seed
+  self.shouldBlink = time % self.config.blinkFrequency == 0 and self.rng.main(100) < 5
 
   if not self.config.doRandomGaze then return end
 
-  if self.focus > 0 then
-    self.focus = self.focus - 1
+  if self.cooldowns.gaze > 0 then
+    self.cooldowns.gaze = self.cooldowns.gaze - 1
   end
-  if player:getVelocity().x_z:length() > 0.25 or player:getSwingTime() == 1 then
-    self.focus = self.config.actionCooldown
-    self.target = player:getTargetedEntity(5)
-    return
-  end
-  if self.focus <= 0 then
+  if self.cooldowns.gaze <= 0 then
     if soundQueue then
       if soundGaze(self, table.unpack(soundQueue)) then return end
     end
@@ -412,24 +412,24 @@ local function gazeController(self, time)
     end
   end
 
-  if time % self.config.lookInterval ~= 0 or self.random(100) >= (self.config.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
+  if time % self.config.lookInterval ~= 0 or self.rng.main(100) >= (self.config.lookChance * 100) then return end -- Rolls the chance which the player will change their gaze this tick
 
-  self.random.seed = time * self.seed
+  self.rng.main.seed = time * self.seed
 
   local lookDir = player:getLookDir()
   local seenEntities = entityGaze(self, lookDir)
 
-  if self.config.socialInterest > 0 and #seenEntities ~= 0 and self.random(100) < (self.config.socialInterest * 100) then
+  if self.config.socialInterest > 0 and #seenEntities ~= 0 and self.rng.main(100) < (self.config.socialInterest * 100) then
     local rarityCount = 0
     for _, v in pairs(seenEntities) do
       rarityCount = rarityCount + v.lookChance
     end
-    self.target = pullRandomEntity(self, seenEntities, rarityCount)
-    if self.target and isObscured(self, getTargetPos(self.target)) then
-      self.target = blockGaze(self, lookDir)
+    self.targets.main = pullRandomEntity(self, seenEntities, rarityCount)
+    if self.targets.main and isObscured(self, getTargetPos(self.targets.main)) then
+      self.targets.main = blockGaze(self, lookDir)
     end
   else
-    self.target = blockGaze(self, lookDir)
+    self.targets.main = blockGaze(self, lookDir)
   end
 end
 
@@ -445,10 +445,23 @@ local running = false
 
 local function tick()
   local time = world.getTime()
-  for _, gazeObject in pairs(gazes) do
-    if gazeObject.enabled then
-      gazeController(gazeObject, time)
-      gazeObject(time)
+  for _, self in pairs(gazes) do
+    if self.enabled then
+      if self.cooldowns.action > 0 then
+        self.cooldowns.action = self.cooldowns.action - 1
+      end
+      if time % 5 == 0 and self.cooldowns.action <= 0 then
+        self.targets.isAction = false
+
+        local targetEntity = player:getTargetedEntity()
+        if player:getVelocity().x_z:length() > 0.25 or player:getSwingTime() ~= 0 or targetEntity then
+          self.cooldowns.action = self.config.actionCooldown
+          self.targets.action = targetEntity
+          self.targets.isAction = true
+        end
+      end
+      gazeController(self, time)
+      self(time)
     end
   end
 
@@ -465,9 +478,9 @@ local function tick()
 end
 
 local function render(delta)
-  for _, gazeObject in pairs(gazes) do
-    if gazeObject.enabled then
-      gazeObject(delta, true)
+  for _, self in pairs(gazes) do
+    if self.enabled then
+      self(delta, true)
     end
   end
 
@@ -509,22 +522,20 @@ end
 ---Sets this FOXGaze object's enabled state
 ---@generic self
 ---@param self FOXGaze.Generic|self
----@param boolean boolean
+---@param enabled boolean
 ---@return self
-function generic:setEnabled(boolean)
-  self.enabled = boolean
+function generic:setEnabled(enabled)
+  self.enabled = enabled
   return self
 end
 
 ---Permanently removes this FOXGaze object
----@generic self
 ---@param self FOXGaze.Any|self
 function generic:remove()
   self.parent.children[self.uuid] = nil
 end
 
 ---Returns the UUID of this FOXGaze object
----@generic self
 ---@param self FOXGaze.Generic|self
 ---@return string
 function generic:getUUID()
@@ -535,12 +546,12 @@ end
 --#REGION ˚♡ FOXGaze.Eye ♡˚
 
 ---@class FOXGaze.Eye: FOXGaze.Generic
----@field element ModelPart
----@field left number
----@field right number
----@field up number
----@field down number
----@field side boolean
+---@field element ModelPart The eye ModelPart
+---@field left number How far to the left this eye can move from its initial position
+---@field right number How far to the right this eye can move from its initial position
+---@field up number How far up this eye can move from its initial position
+---@field down number How far down this eye can move from its initial position
+---@field side boolean If this eye is on the side of the head
 ---@field package lerp {old: Vector3, new: Vector3}
 ---@field package parent FOXGaze
 local eye = {}
@@ -591,9 +602,9 @@ end
 --#REGION ˚♡ FOXGaze.Animation ♡˚
 
 ---@class FOXGaze.Animation: FOXGaze.Generic
----@field horizontal Animation
----@field vertical Animation
----@field dampen number
+---@field horizontal Animation The horizontal animation
+---@field vertical Animation The vertical animation
+---@field dampen number How much dampening should be applied when lerping the animations
 ---@field package lerp {old: Vector2, new: Vector2}
 ---@field package parent FOXGaze
 local anim = {}
@@ -640,11 +651,50 @@ function anim:zero()
   return self
 end
 
+---@return self
+function anim:enable()
+  if self.enabled then return self end
+
+  self.horizontal:play():pause()
+  self.vertical:play():pause()
+
+  self.enabled = true
+  return self
+end
+
+---@return self
+function anim:disable()
+  if not self.enabled then return self end
+
+  self.horizontal:stop()
+  self.vertical:stop()
+
+  self.enabled = false
+  return self
+end
+
+---@param enabled boolean
+---@return self
+function anim:setEnabled(enabled)
+  if self.enabled == enabled then return self end
+
+  if enabled then
+    self.horizontal:play():pause()
+    self.vertical:play():pause()
+  else
+    self.horizontal:stop()
+    self.vertical:stop()
+  end
+
+  self.enabled = enabled
+  return self
+end
+
 --#ENDREGION
 --#REGION ˚♡ FOXGaze.UV ♡˚
 
 ---@class FOXGaze.UV: FOXGaze.Generic
----@field element ModelPart
+---@field element ModelPart The ModelPart to apply UV transformations to
 ---@field package parent FOXGaze
 local uv = {}
 
@@ -684,7 +734,7 @@ end
 --#REGION ˚♡ FOXGaze.Blink ♡˚
 
 ---@class FOXGaze.Blink: FOXGaze.Generic
----@field animation Animation
+---@field animation Animation The blinking animation
 ---@field package timer number
 ---@field package parent FOXGaze
 local blink = {}
@@ -723,11 +773,13 @@ end
 --#REGION ˚♡ FOXGaze ♡˚
 
 ---@class FOXGaze.Any: FOXGaze.Eye, FOXGaze.Animation, FOXGaze.UV, FOXGaze.Blink
+---@alias FOXGazeTargets Vector2|Vector3|Entity
 
 ---@class FOXGazeConfigs
 ---@field socialInterest number `0.8` A number from 0 to 1, how interested this gaze is in entities, 0 being completely uninterested
 ---@field soundInterest number `0.5` A number from 0 to 1, how interested this gaze is in sounds, 0 being completely uninterested
----@field actionCooldown number `20` After an action takes focus (i.e. played sound or chat message), how many ticks until another action can take away focus. Doesn't apply to random focuses
+---@field gazeCooldown number `20` After an action takes focus (i.e. played sound or chat message), how many ticks until another action can take away focus. Doesn't apply to random focuses
+---@field actionCooldown number `100` How long after swinging, moving fast, or looking at an entity should the gaze switch to something else
 ---@field lookInterval number `5` How often in ticks the gaze has a chance to change
 ---@field lookChance number `0.1` A number from 0 to 1, the chance at which the gaze will automatically change
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
@@ -740,17 +792,15 @@ end
 
 ---@class FOXGaze: FOXGaze.Generic
 ---@field isPrimary boolean Whether this gaze is considered the primary gaze. The primary gaze directly sets the vanilla head's offset rotation
----@field package head ModelPart?
----@field package eyePivot ModelPart?
----@field package headRot FOXGazeHeadLerp
----@field package target FOXGazeTarget?
----@field package override FOXGazeTarget?
----@field package random Random.Kate
----@field package uuidRandom Random.Kate
----@field package focus number
----@field package shouldBlink boolean
+---@field head ModelPart? The head ModelPart
+---@field eyePivot ModelPart? A pivot where your eyes are on the head ModelPart
 ---@field config FOXGazeConfigs This gaze's configs
 ---@field children table<string, FOXGaze.Any> Stores all the created eyes, anims, UVs, and blinks for this gaze
+---@field package headRot FOXGazeHeadLerp
+---@field package targets {main: FOXGazeTargets?, override: FOXGazeTargets?, action: FOXGazeTargets?, isAction: boolean}
+---@field package rng {main: Random.Kate, uuid: Random.Kate}
+---@field package cooldowns {gaze: number, action: number}
+---@field package shouldBlink boolean
 ---@field package seed number
 local gaze = {}
 
@@ -774,16 +824,16 @@ local gazeMeta = {
 ---
 ---If the eye is on the side of the head, make set side to true
 ---@param self FOXGaze
----@param element ModelPart
----@param left number?
----@param right number?
----@param up number?
----@param down number?
----@param side boolean?
+---@param element ModelPart The eye ModelPart
+---@param left number? `0.25` How far to the left this eye can move from its initial position
+---@param right number? `1.25` How far to the right this eye can move from its initial position
+---@param up number? `0.5` How far up this eye can move from its initial position
+---@param down number? `0.5` How far down this eye can move from its initial position
+---@param side boolean? `false` If this eye is on the side of the head. If this is a left eye, the left and right bounds should be negative.
 ---@return FOXGaze.Eye
 function gaze:newEye(element, left, right, up, down, side)
   assert(type(element) == "ModelPart", "ModelPart expected!", 2)
-  local uuid = newUUID(self.uuidRandom)
+  local uuid = newUUID(self.rng.uuid)
   assert(not self.children[uuid], "UUID collision occured!", 2)
   local object = setmetatable({
     enabled = true,
@@ -809,9 +859,9 @@ end
 ---
 ---The dampen argument can be a number from 0 to 1, with 0 being default with no dampening, and 1 being your animation doesn't play at all.
 ---@param self FOXGaze
----@param horizontal Animation
----@param vertical Animation
----@param dampen number?
+---@param horizontal Animation The horizontal animation
+---@param vertical Animation The vertical animation
+---@param dampen number? `0` How much dampening should be applied when lerping the animations
 ---@return FOXGaze.Animation
 function gaze:newAnim(horizontal, vertical, dampen)
   local check = (horizontal and horizontal.play) and (vertical and vertical.play)
@@ -820,7 +870,7 @@ function gaze:newAnim(horizontal, vertical, dampen)
   horizontal:play():pause():setTime(0.5)
   vertical:play():pause():setTime(0.5)
 
-  local uuid = newUUID(self.uuidRandom)
+  local uuid = newUUID(self.rng.uuid)
   assert(not self.children[uuid], "UUID collision occured!", 2)
 
   local object = setmetatable({
@@ -842,11 +892,11 @@ end
 ---
 ---The top right face should look up-right, and the bottom left face should look bottom-left
 ---@param self FOXGaze
----@param element ModelPart
+---@param element ModelPart The ModelPart to apply UV transformations to. This should NOT just be your head ModelPart
 ---@return FOXGaze.UV
 function gaze:newUV(element)
   assert(type(element) == "ModelPart", "ModelPart expected!", 2)
-  local uuid = newUUID(self.uuidRandom)
+  local uuid = newUUID(self.rng.uuid)
   assert(not self.children[uuid], "UUID collision occured!", 2)
 
   local object = setmetatable({
@@ -862,11 +912,11 @@ end
 ---Creates a new blink animation
 ---
 ---The animation will play randomly when the player isn't sleeping
----@param animation Animation
+---@param animation Animation The blinking animation
 ---@return FOXGaze.Blink
 function gaze:newBlink(animation)
   assert(type(animation) == "Animation", "Blink animation expected!", 2)
-  local uuid = newUUID(self.uuidRandom)
+  local uuid = newUUID(self.rng.uuid)
   assert(not self.children[uuid], "UUID collision occured!", 2)
 
   local object = setmetatable({
@@ -880,7 +930,15 @@ function gaze:newBlink(animation)
 end
 
 ---Sets this gaze's target override
----@param target FOXGazeTarget
+---
+---If this is a Vector2, it moves your eyes to that position on the face, starting from 0, 0 being the center, 1, 1 being upper left, and -1, -1 being lower left.
+---
+---If this is a Vector3, makes the eyes track that block coordinate.
+---
+---If this is an entity, makes the eyes track that entity.
+---
+---If this is nil, unsets the current override.
+---@param target FOXGazeTargets?
 ---@return FOXGaze
 function gaze:setTargetOverride(target)
   self.override = target
@@ -888,21 +946,22 @@ function gaze:setTargetOverride(target)
 end
 
 ---Returns the target or nil
----@return FOXGazeTarget?
+---@return FOXGazeTargets?
 function gaze:getTarget()
-  return self.target
+  return self.targets.main
 end
 
 ---Returns the target override or nil
----@return FOXGazeTarget?
+---@return FOXGazeTargets?
 function gaze:getTargetOverride()
-  return self.override
+  return self.targets.override
 end
 
 ---Runs `zero` on all this gaze's children, resets the head offset rotation, and clears the target
 ---@return FOXGaze
 function gaze:zero()
-  self.target = nil
+  self.targets.main = nil
+  self.targets.action = nil
   self.headRot.target = vec(0, 0, 0)
   for _, object in pairs(self.children) do
     object:zero()
@@ -932,16 +991,14 @@ end
 --#ENDREGION
 --#REGION ˚♡ FOXGazeAPI ♡˚
 
----@alias FOXGazeTarget Vector2|Vector3|Entity
-
 ---@class FOXGazeAPI
 local api = {}
 
 ---Creates a new gaze. A gaze controls looking and can be created per head
 ---
 ---Gazes can have eyes, animations that follow your gaze, UV eyes, and blinking animations.
----@param head ModelPart?
----@param eyePivot ModelPart?
+---@param head ModelPart? The head ModelPart
+---@param eyePivot ModelPart? A pivot where your eyes are on the head ModelPart
 ---@return FOXGaze
 function api:newGaze(head, eyePivot)
   local objectUUID = newUUID(uuidRng)
@@ -967,17 +1024,27 @@ function api:newGaze(head, eyePivot)
       old = vec(0, 0, 0),
       new = vec(0, 0, 0),
     },
-    target = nil,
-    override = nil,
-    random = random.new(),
-    uuidRandom = random.new(objectUUIDInt),
-    focus = 0,
+    targets = {
+      main = nil,
+      override = nil,
+      action = nil,
+      isAction = false,
+    },
+    rng = {
+      main = random.new(),
+      uuid = random.new(objectUUIDInt),
+    },
+    cooldowns = {
+      gaze = 0,
+      action = 0,
+    },
     shouldBlink = false,
     ---@class FOXGazeConfigs
     config = {
       socialInterest = 0.8,
       soundInterest = 0.5,
-      actionCooldown = 20,
+      gazeCooldown = 20,
+      actionCooldown = 100,
       lookInterval = 5,
       lookChance = 0.1,
       blinkFrequency = 7,
@@ -997,13 +1064,23 @@ function api:newGaze(head, eyePivot)
 end
 
 ---Sets the target override for all gazes of all players. This is only applied on the host.
----@param target FOXGazeTarget
+---
+---If this is a Vector2, it moves your eyes to that position on the face, starting from 0, 0 being the center, 1, 1 being upper left, and -1, -1 being lower left.
+---
+---If this is a Vector3, makes the eyes track that block coordinate.
+---
+---If this is an entity, makes the eyes track that entity.
+---
+---If this is nil, unsets the current override.
+---@param target FOXGazeTargets?
+---@return self
 function api:setGlobalTargetOverride(target)
   avatar:store("FOXGaze.globalTarget", target)
+  return self
 end
 
 ---Returns the viewer's target override
----@return FOXGazeTarget target
+---@return FOXGazeTargets? target
 function api:getGlobalTargetOverride()
   return viewer:getVariable("FOXGaze.globalTarget")
 end
@@ -1011,15 +1088,19 @@ end
 ---Sets the enabled state for debug mode
 ---
 ---Debug mode draws a line of particles from all gazes of all players to their gaze targets. This is only seen by the host.
----@param boolean boolean
-function api:debugMode(boolean)
-  avatar:store("FOXGaze.debugMode", boolean)
+---@param enabled boolean
+---@return self
+function api:debugMode(enabled)
+  avatar:store("FOXGaze.debugMode", enabled)
+  return self
 end
 
 ---Makes the current primary gaze no longer primary
+---@return self
 function api:unsetPrimary()
   primaryGaze.isPrimary = false
   primaryGaze = nil
+  return self
 end
 
 --#ENDREGION
