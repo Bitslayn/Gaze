@@ -217,7 +217,7 @@ local function updateGaze(self, time, isRender)
       end
 
       if target then
-        x, y = getEyeDir(self, gazePos, viewer:getVariable("FOXGaze.debugMode"))
+        x, y = getEyeDir(self, gazePos, viewer:getVariable("FOXGaze.debugMode") or self.debug)
         method = target.x and "Blocks" or "Entities"
       else
         local headRot
@@ -807,6 +807,7 @@ end
 ---@field package cooldowns {gaze: number, action: number}
 ---@field package shouldBlink boolean
 ---@field package seed number
+---@field package debug boolean
 local gaze = {}
 
 local gazeMeta = {
@@ -993,6 +994,16 @@ function gaze:setAsPrimary()
   return self
 end
 
+---Sets the enabled state for debug mode
+---
+---Debug mode draws a line of particles of this gaze only. This is not host only so any player can see this if the avatar is uploaded.
+---@param enabled boolean
+---@return self
+function gaze:debugMode(enabled)
+  self.debug = enabled
+  return self
+end
+
 --#ENDREGION
 --#REGION ˚♡ FOXGazeAPI ♡˚
 
@@ -1061,6 +1072,7 @@ function api:newGaze(head, eyePivot)
       faceDirection = false,
       doRandomGaze = true,
     },
+    debug = false,
     children = {},
     seed = objectSeed,
   }, gazeMeta)
