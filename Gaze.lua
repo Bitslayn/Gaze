@@ -3,7 +3,7 @@ ____  ___ __   __
 | __|/ _ \\ \ / /
 | _|| (_) |> w <
 |_|  \___//_/ \_\
-FOX's Gaze API v1.0.0
+FOX's Gaze API v1.0.1
 
 Contributors:
   ChloeSpacedOut - Automatic Gaze
@@ -208,7 +208,7 @@ local function updateGaze(self, time, isRender)
 
     if type(target) ~= "Vector2" then
       local gazePos = getTargetPos(target)
-      if gazePos and time % 20 == 0 and isObscured(self, gazePos) then
+      if gazePos and time % 20 == 0 and isObscured(self, gazePos) or (target and target.getName and target:getName() == "FreeCamera") then
         if self.targets.isAction and target == self.targets.action then
           target, self.targets.action = nil, nil
         elseif target == self.targets.main then
@@ -1113,7 +1113,7 @@ end
 -- DO NOT TOUCH
 
 local _NAME = "Gaze"
-local _VER = "1.0.0"
+local _VER = "1.0.1"
 local _BRANCH = "dev"
 
 _FOX = _FOX or {}
