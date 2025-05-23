@@ -243,7 +243,11 @@ local function updateGaze(self, time, isRender)
 
     self.headRot.old = self.headRot.new
     ---@diagnostic disable-next-line: assign-type-mismatch
-    self.headRot.new = math.lerp(self.headRot.old, self.headRot.target, 1 - self.config.turnDampen)
+    self.headRot.new = math.lerp(
+      self.headRot.old,
+      self.headRot.target:mul(self.config.turnMult.xy_),
+      1 - self.config.turnDampen
+    )
 
     ---@diagnostic disable-next-line: redundant-parameter
     for _, object in pairs(self.children) do object.tick(object, -x, y, time) end
@@ -785,6 +789,7 @@ end
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
 ---@field turnStrength number `22.5` The furthest the head should rotate in a single direction
 ---@field turnDampen number `0.7` A number from 0 to 1, with 0 being default with no dampening, and 1 being your head doesn't turn at all.
+---@field turnMult Vector2 `vec(1, 1)` Multiplies by the turnStrength to get how far the head can rotate in that direction
 ---@field faceEntities boolean `true` Whether the head should rotate when the gaze looks at entities
 ---@field faceBlocks boolean `false` Whether the head should rotate when the gaze looks at blocks
 ---@field faceDirection boolean `false` Whether the head should rotate when there are no gaze targets, or the player is focused
@@ -1050,6 +1055,7 @@ function api:newGaze(head, eyePivot)
       blinkFrequency = 7,
       turnStrength = 22.5,
       turnDampen = 0.7,
+      turnMult = vec(1, 1),
       faceEntities = true,
       faceBlocks = false,
       faceDirection = false,
