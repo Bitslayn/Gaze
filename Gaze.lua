@@ -1017,6 +1017,9 @@ local api = {}
 ---@param eyePivot ModelPart? A pivot where your eyes are on the head ModelPart
 ---@return FOXGaze
 function api:newGaze(head, eyePivot)
+  assert(type(head) == "nil" or type(head) == "ModelPart", "Invalid type for head")
+  assert(not head or type(head) == "ModelPart" and head:getParentType() ~= "Head",
+    "The provided head modelpart should not use the head parent type!")
   local objectUUID = newUUID(uuidRng)
   assert(not gazes[objectUUID], "UUID collision occured!", 2)
   local objectUUIDInt = client.uuidToIntArray(objectUUID)
