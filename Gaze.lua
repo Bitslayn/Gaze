@@ -651,6 +651,45 @@ function anim:zero()
   return self
 end
 
+---@return self
+function anim:enable()
+  if self.enabled then return self end
+
+  self.horizontal:play():pause()
+  self.vertical:play():pause()
+
+  self.enabled = true
+  return self
+end
+
+---@return self
+function anim:disable()
+  if not self.enabled then return self end
+
+  self.horizontal:stop()
+  self.vertical:stop()
+
+  self.enabled = false
+  return self
+end
+
+---@param enabled boolean
+---@return self
+function anim:setEnabled(enabled)
+  if self.enabled == enabled then return self end
+
+  if enabled then
+    self.horizontal:play():pause()
+    self.vertical:play():pause()
+  else
+    self.horizontal:stop()
+    self.vertical:stop()
+  end
+
+  self.enabled = enabled
+  return self
+end
+
 --#ENDREGION
 --#REGION ˚♡ FOXGaze.UV ♡˚
 
@@ -740,7 +779,7 @@ end
 ---@field socialInterest number `0.8` A number from 0 to 1, how interested this gaze is in entities, 0 being completely uninterested
 ---@field soundInterest number `0.5` A number from 0 to 1, how interested this gaze is in sounds, 0 being completely uninterested
 ---@field gazeCooldown number `20` After an action takes focus (i.e. played sound or chat message), how many ticks until another action can take away focus. Doesn't apply to random focuses
----@field actionCooldown number `100` How long after swinging, moving fast, or looking at an entity should gaze lose focus and become random
+---@field actionCooldown number `100` How long after swinging, moving fast, or looking at an entity should the gaze switch to something else
 ---@field lookInterval number `5` How often in ticks the gaze has a chance to change
 ---@field lookChance number `0.1` A number from 0 to 1, the chance at which the gaze will automatically change
 ---@field blinkFrequency number `7` How often in ticks the gaze has a chance to blink
@@ -753,15 +792,15 @@ end
 
 ---@class FOXGaze: FOXGaze.Generic
 ---@field isPrimary boolean Whether this gaze is considered the primary gaze. The primary gaze directly sets the vanilla head's offset rotation
----@field package head ModelPart?
----@field package eyePivot ModelPart?
+---@field head ModelPart? The head ModelPart
+---@field eyePivot ModelPart? A pivot where your eyes are on the head ModelPart
+---@field config FOXGazeConfigs This gaze's configs
+---@field children table<string, FOXGaze.Any> Stores all the created eyes, anims, UVs, and blinks for this gaze
 ---@field package headRot FOXGazeHeadLerp
 ---@field package targets {main: FOXGazeTargets?, override: FOXGazeTargets?, action: FOXGazeTargets?, isAction: boolean}
 ---@field package rng {main: Random.Kate, uuid: Random.Kate}
 ---@field package cooldowns {gaze: number, action: number}
 ---@field package shouldBlink boolean
----@field config FOXGazeConfigs This gaze's configs
----@field children table<string, FOXGaze.Any> Stores all the created eyes, anims, UVs, and blinks for this gaze
 ---@field package seed number
 local gaze = {}
 
