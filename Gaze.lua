@@ -44,6 +44,7 @@ local randomMetatable = {
 }
 
 local random = {}
+local worldTime = 0
 
 ---@param seed? integer
 ---@return Random.Kate
@@ -319,9 +320,13 @@ end
 
 local soundQueue
 
-function events.on_play_sound(sound, pos, volume)
+local function soundEvent(sound, pos, volume)
   if not world.exists() then return end
-  soundQueue = { sound, pos, volume, world.getTime() }
+  soundQueue = { sound, pos, volume, worldTime }
+end
+
+function events.on_play_sound(...)
+  pcall(soundEvent, ...)
 end
 
 ---@param self FOXGaze
@@ -345,7 +350,7 @@ end
 local damageQueue
 
 function events.damage(_, attacker)
-  damageQueue = { attacker, world.getTime() }
+  damageQueue = { attacker, worldTime }
 end
 
 ---@param self FOXGaze
@@ -362,7 +367,7 @@ local chatQueue
 
 ---@param chatterName string
 function pings.chatGaze(chatterName)
-  chatQueue = { chatterName, world.getTime() }
+  chatQueue = { chatterName, worldTime }
 end
 
 ---@param self FOXGaze
@@ -449,13 +454,13 @@ local gazes = {}
 local running = false
 
 local function tick()
-  local time = world.getTime()
+  worldTime = world.getTime()
   for _, self in pairs(gazes) do
     if self.enabled then
       if self.cooldowns.action > 0 then
         self.cooldowns.action = self.cooldowns.action - 1
       end
-      if time % 5 == 0 and self.cooldowns.action <= 0 then
+      if worldTime % 5 == 0 and self.cooldowns.action <= 0 then
         self.targets.isAction = false
 
         local targetEntity = player:getTargetedEntity()
@@ -465,14 +470,14 @@ local function tick()
           self.targets.isAction = true
         end
       end
-      gazeController(self, time)
-      self(time)
+      gazeController(self, worldTime)
+      self(worldTime)
     end
   end
 
-  if soundQueue and (time - soundQueue[4]) >= 60 then soundQueue = nil end
-  if damageQueue and (time - damageQueue[2]) >= 60 then damageQueue = nil end
-  if chatQueue and (time - chatQueue[2]) >= 60 then chatQueue = nil end
+  if soundQueue and (worldTime - soundQueue[4]) >= 60 then soundQueue = nil end
+  if damageQueue and (worldTime - damageQueue[2]) >= 60 then damageQueue = nil end
+  if chatQueue and (worldTime - chatQueue[2]) >= 60 then chatQueue = nil end
 
   if not primaryGaze then return end
 
