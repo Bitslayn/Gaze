@@ -1127,7 +1127,7 @@ end
 --#ENDREGION
 
 --#ENDREGION
---#REGION ˚♡ FOXLib ♡˚
+--#REGION ˚♡ FOX ♡˚
 
 -- This exposes information like library version and name to your avatar vars. This is helpful with debugging
 
@@ -1139,7 +1139,7 @@ local _BRANCH = "dev"
 
 _FOX = _FOX or {}
 _FOX[_NAME] = { name = _NAME, ver = _VER, branch = _BRANCH }
-avatar:store("FOXLib", _FOX)
+avatar:store("FOX", _FOX)
 
 --#ENDREGION
 
