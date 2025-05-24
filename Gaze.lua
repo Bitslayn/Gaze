@@ -320,6 +320,7 @@ end
 local soundQueue
 
 function events.on_play_sound(sound, pos, volume)
+  if not world.exists() then return end
   soundQueue = { sound, pos, volume, world.getTime() }
 end
 
