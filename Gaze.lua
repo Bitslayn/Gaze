@@ -277,8 +277,9 @@ end
 
 local viewRange = vec(4, 4, 4)
 
+---@param self FOXGaze
 ---@param lookDir Vector3
-local function entityGaze(_, lookDir)
+local function entityGaze(self, lookDir)
   local seenEntities = {}
   local playerPos = player:getPos()
   local viewCenter = playerPos + lookDir * 4
@@ -287,7 +288,7 @@ local function entityGaze(_, lookDir)
   if #entities > 20 then return seenEntities end
 
   for _, entity in pairs(entities) do
-    if player ~= entity then
+    if entity ~= player and (entity:isLiving() or self.config.gazeAtNonLiving) then
       local pos = entity:getPos()
       local distance = (pos - playerPos):length()
       local speedMod = (entity:getVelocity():length() + 1) * 1000
@@ -790,6 +791,7 @@ end
 ---@class FOXGazeConfigs
 ---@field socialInterest number `0.8` A number from 0 to 1, how interested this gaze is in entities, 0 being completely uninterested
 ---@field soundInterest number `0.5` A number from 0 to 1, how interested this gaze is in sounds, 0 being completely uninterested
+---@field gazeAtNonLiving boolean `false` Whether to gaze at item frames, paintings, boats, and any other non-living entity
 ---@field gazeCooldown number `20` After an action takes focus (i.e. played sound or chat message), how many ticks until another action can take away focus. Doesn't apply to random focuses
 ---@field actionCooldown number `100` How long after swinging, moving fast, or looking at an entity should the gaze switch to something else
 ---@field lookInterval number `5` How often in ticks the gaze has a chance to change
@@ -1070,6 +1072,7 @@ function api:newGaze(head, eyePivot)
     config = {
       socialInterest = 0.8,
       soundInterest = 0.5,
+      gazeAtNonLiving = false,
       gazeCooldown = 20,
       actionCooldown = 100,
       lookInterval = 5,
