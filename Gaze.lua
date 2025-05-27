@@ -105,7 +105,9 @@ local primaryGaze
 ---@param self FOXGaze
 ---@return Vector3
 local function getHeadPos(self)
-  return (self.eyePivot or self.head):partToWorldMatrix():apply()
+  local headMat = (self.eyePivot or self.head):partToWorldMatrix()
+  if headMat.v11 ~= headMat.v11 then return vec(0, 0, 0) end -- NaN check
+  return headMat:apply()
 end
 
 ---Gets the eular rotation of the head part
