@@ -288,7 +288,7 @@ local function entityGaze(self, lookDir)
   if #entities > 20 then return seenEntities end
 
   for _, entity in pairs(entities) do
-    if entity ~= player and (entity:isLiving() or self.config.gazeAtNonLiving) then
+    if entity ~= player and entity ~= player:getVehicle() and (entity:isLiving() or self.config.gazeAtNonLiving) then
       local pos = entity:getPos()
       local distance = (pos - playerPos):length()
       local speedMod = (entity:getVelocity():length() + 1) * 1000
