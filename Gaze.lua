@@ -659,7 +659,7 @@ function anim:render(delta)
 	if not self.enabled then return self end
 	if self.blink and self.blend.target then
 		local x = (self.blend.target - client.getSystemTime()) / self.blend.length
-		x = math.abs(x - 1)
+		x = math.clamp(math.abs(x - 1), 0, 1)
 
 		local a = math.abs(x - 0.5) * 2 -- v
 		local b = 1 - math.abs(x - 0.5) * 2 -- ^
