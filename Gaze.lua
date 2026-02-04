@@ -324,7 +324,6 @@ end
 local soundQueue
 
 local function soundEvent(sound, pos, volume)
-  if not world.exists() then return end
 	soundQueue = { sound, pos, volume, worldTime }
 end
 
@@ -641,7 +640,7 @@ local animMeta = {
 ---@package
 function anim:tick(x, y)
 	if not self.enabled then return self end
-	if self.blink and self.parent.shouldBlink and player:getPose() ~= "SLEEPING" then
+	if self.parent.shouldBlink and player:getPose() ~= "SLEEPING" and self.blink and not self.blend.target then
 		self.blend.target = client.getSystemTime() + self.blend.length
 	end
 
@@ -919,7 +918,7 @@ function gaze:newAnim(horizontal, vertical, dampen, blink)
 		vertical = vertical,
 		dampen = dampen or 0,
 		blink = blink,
-		blend = { length = blink and math.floor(blink.animation:getLength() * 1000) },
+		blend = { length = blink and math.floor(blink.animation:getLength() * 1000 * 1 / blink.animation:getSpeed()) },
 		lerp = { old = vec(0, 0), new = vec(0, 0) },
 	}, animMeta)
 	self.children[object.uuid] = object
